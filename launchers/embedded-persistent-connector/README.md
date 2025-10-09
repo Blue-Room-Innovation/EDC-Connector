@@ -31,6 +31,8 @@ curl http://localhost:8181/api/health
 ```
 
 ## Docker / Compose
+El `docker-compose.yml` declara `name: minimal-connector` para que el contenedor se denomine `minimal-connector-connector-1`.
+
 ```
 docker compose up --build
 ```
@@ -40,6 +42,13 @@ curl http://localhost:8181/api/health
 ```
 
 Logs esperados: mensaje indicando recepción de la petición de health.
+
+Si ves advertencia de "orphan containers" (por restos anteriores):
+```
+docker compose down --remove-orphans
+```
+
+La raíz incluye `.dockerignore` para reducir el contexto de build.
 
 ## Configuración
 Editar `configuration.properties` para cambiar puerto o path.

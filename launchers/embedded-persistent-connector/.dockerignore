@@ -1,0 +1,9 @@
+# Reduce build context
+.build/
+.gradle/
+**/bin/
+**/build/
+!build/libs/
+!build/libs/minimal-connector.jar
+.dockerignore
+Dockerfile
