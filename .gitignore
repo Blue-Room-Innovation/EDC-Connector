@@ -52,3 +52,7 @@ launchers/demo-e2e/edc-config.properties
 .env
 runtime_settings.properties
 generated_backend.tf
+ 
+# --- Generated class/output dirs not previously ignored ---
+**/bin/
+**/bin

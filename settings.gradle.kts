@@ -226,6 +226,7 @@ include(":extensions:policy-monitor:store:sql:policy-monitor-store-sql")
 // modules for launchers, i.e. runnable compositions of the app ------------------------------------
 include(":launchers:dpf-selector")
 include(":launchers:sts-server")
+include(":launchers:embedded-persistent-connector")
 
 // extension points for a connector ----------------------------------------------------------------
 include(":spi:common:auth-spi")

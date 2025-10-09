@@ -1,0 +1,13 @@
+services:
+  connector:
+    build:
+      context: .
+      dockerfile: src/main/docker/Dockerfile
+      args:
+        JAR: minimal-connector.jar
+    image: minimal-connector:latest
+    restart: unless-stopped
+    volumes:
+      - ./configuration.properties:/app/configuration.properties:ro
+    ports:
+      - "8181:8181"
