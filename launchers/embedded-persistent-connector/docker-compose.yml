@@ -11,6 +11,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./configuration.properties:/app/configuration.properties:ro
+      - ./logging.properties:/app/logging.properties:ro
+      - ./logs:/app/logs
     ports:
       - "8181:8181" # Endpoint health
     # Para limpiar contenedores huérfanos de versiones previas: `docker compose down --remove-orphans`

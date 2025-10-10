@@ -23,8 +23,14 @@ Resultado: `build/libs/minimal-connector.jar`.
 > Usa este comando solo si necesitas el JAR localmente o quieres producir la imagen sin arrancar el contenedor. Para levantar Docker no hace falta: el propio `docker compose up -d --build` ejecuta Gradle por ti. La primera build dentro de Docker tarda ~2 minutos mientras Gradle descarga dependencias; verás un mensaje informativo para confirmar que sigue trabajando.
 
 ## Ejecutar en Host
+Crear carpeta para logs (solo primera vez):
 ```
-java -jar launchers/embedded-persistent-connector/build/libs/minimal-connector.jar -Dedc.fs.config=launchers/embedded-persistent-connector/configuration.properties
+mkdir -p launchers/embedded-persistent-connector/logs
+```
+
+Ejecutar:
+```
+java -jar launchers/embedded-persistent-connector/build/libs/minimal-connector.jar -Dedc.fs.config=launchers/embedded-persistent-connector/configuration.properties -Djava.util.logging.config.file=launchers/embedded-persistent-connector/logging.properties
 ```
 
 Probar health:
@@ -41,6 +47,7 @@ docker compose up -d --build
 ```
 - Este comando construye la imagen **y** deja el contenedor corriendo. La parte de build tarda ~2 minutos la primera vez porque Gradle descarga dependencias; verás un mensaje indicando que sigue compilando.
 - Usar `--build` es suficiente para generar el artefacto dentro de la imagen, no necesitas ejecutar Gradle manualmente.
+- Los logs se guardan en `launchers/embedded-persistent-connector/logs/` del host (carpeta montada en `/app/logs`).
 
 Verifica el endpoint de health:
 ```
@@ -57,6 +64,7 @@ Gradle ya no se lanza y el arranque es casi inmediato. Solo vuelve a usar `--bui
 - Ver logs: `docker compose logs -f`
 - Detener: `docker compose down`
 - Limpiar contenedores huérfanos de ejecuciones previas: `docker compose down --remove-orphans`
+- Limpiar y recrear la carpeta de logs: `rm -rf logs && mkdir logs`
 
 La raíz incluye `.dockerignore` para reducir el contexto de build.
 

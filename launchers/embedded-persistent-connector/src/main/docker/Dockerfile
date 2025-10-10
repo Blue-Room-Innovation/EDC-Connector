@@ -27,8 +27,11 @@ WORKDIR /app
 ARG JAR=minimal-connector.jar
 COPY --from=build /workspace/launchers/embedded-persistent-connector/build/libs/${JAR} app.jar
 COPY launchers/embedded-persistent-connector/configuration.properties ./configuration.properties
+COPY launchers/embedded-persistent-connector/logging.properties ./logging.properties
+
+RUN mkdir -p /app/logs
 
 EXPOSE 8181
-ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx256m"
+ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx256m -Djava.util.logging.config.file=/app/logging.properties"
 
 ENTRYPOINT ["java","-jar","app.jar","-Dedc.fs.config=configuration.properties"]
