@@ -1,6 +1,18 @@
 name: minimal-connector
 
 services:
+  connector-db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: minimal_connector
+      POSTGRES_USER: connector
+      POSTGRES_PASSWORD: connector
+    ports:
+      - "5532:5432"
+    volumes:
+      - connector_db_data:/var/lib/postgresql/data
+
   connector:
     build:
       context: ../..
@@ -9,10 +21,52 @@ services:
         JAR: minimal-connector.jar
     image: minimal-connector:latest
     restart: unless-stopped
+    depends_on:
+      - connector-db
     volumes:
       - ./configuration.properties:/app/configuration.properties:ro
       - ./logging.properties:/app/logging.properties:ro
       - ./logs:/app/logs
+    environment:
+      EDC_HOSTNAME: connector
+      EDC_RUNTIME_ID: minimal-connector
+      EDC_PARTICIPANT_ID: did:web:provider-identityhub%3A7093
+      EDC_IAM_ISSUER_ID: did:web:provider-identityhub%3A7093
+      EDC_IAM_DID_WEB_USE_HTTPS: "false"
+      EDC_API_AUTH_KEY: edc-dev
+      EDC_DSP_CALLBACK_ADDRESS: http://connector:8282/api/dsp
+      EDC_DATASOURCE_DEFAULT_URL: jdbc:postgresql://connector-db:5432/minimal_connector
+      EDC_DATASOURCE_DEFAULT_USER: connector
+      EDC_DATASOURCE_DEFAULT_PASSWORD: connector
+      EDC_SQL_SCHEMA_AUTOCREATE: "true"
+      EDC_VAULT_HASHICORP_URL: http://host.docker.internal:8400
+      EDC_VAULT_HASHICORP_TOKEN: root
+      EDC_IAM_STS_OAUTH_TOKEN_URL: http://host.docker.internal:8582/api/sts/token
+      EDC_IAM_STS_OAUTH_CLIENT_ID: did:web:provider-identityhub%3A7093
+      EDC_IAM_STS_OAUTH_CLIENT_SECRET_ALIAS: did:web:provider-identityhub%3A7093-sts-client-secret
+      EDC_IAM_STS_PRIVATEKEY_ALIAS: did:web:provider-identityhub%3A7093#key-1
+      EDC_IAM_STS_PUBLICKEY_ID: did:web:provider-identityhub%3A7093#key-1
+      WEB_HTTP_DEFAULT_PORT: "8181"
+      WEB_HTTP_DEFAULT_PATH: "/api"
+      WEB_HTTP_MANAGEMENT_PORT: "8281"
+      WEB_HTTP_PROTOCOL_PORT: "8282"
+      WEB_HTTP_CONTROL_PORT: "8283"
+      WEB_HTTP_CATALOG_PORT: "8284"
+      WEB_HTTP_MANAGEMENT_PATH: /api/management
+      WEB_HTTP_PROTOCOL_PATH: /api/dsp
+      WEB_HTTP_CONTROL_PATH: /api/control
+      WEB_HTTP_CATALOG_PATH: /api/catalog
+      WEB_HTTP_MANAGEMENT_AUTH_TYPE: tokenbased
+      WEB_HTTP_MANAGEMENT_AUTH_KEY: edc-dev
+      WEB_HTTP_CATALOG_AUTH_TYPE: tokenbased
+      WEB_HTTP_CATALOG_AUTH_KEY: edc-dev
     ports:
-      - "8181:8181" # Endpoint health
+      - "8181:8181" # HTTP default / health
+      - "9081:8281" # Management API
+      - "9082:8282" # DSP protocol
+      - "9083:8283" # Control API
+      - "9084:8284" # Catalog API
     # Para limpiar contenedores huérfanos de versiones previas: `docker compose down --remove-orphans`
+
+volumes:
+  connector_db_data:
