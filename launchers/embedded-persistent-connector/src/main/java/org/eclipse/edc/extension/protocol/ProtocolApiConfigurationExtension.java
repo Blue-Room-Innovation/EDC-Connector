@@ -1,5 +1,7 @@
 package org.eclipse.edc.extension.protocol;
 
+import static java.lang.String.format;
+
 import org.eclipse.edc.runtime.metamodel.annotation.Extension;
 import org.eclipse.edc.runtime.metamodel.annotation.Inject;
 import org.eclipse.edc.runtime.metamodel.annotation.Provides;
@@ -13,8 +15,6 @@ import org.eclipse.edc.web.spi.WebServer;
 import org.eclipse.edc.web.spi.configuration.ApiContext;
 import org.eclipse.edc.web.spi.configuration.WebServiceConfigurer;
 import org.eclipse.edc.web.spi.configuration.WebServiceSettings;
-
-import static java.lang.String.format;
 
 /**
  * Local protocol API configuration that ensures a ProtocolWebhook is available when the runtime boots.
