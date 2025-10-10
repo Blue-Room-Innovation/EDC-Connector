@@ -1,0 +1,8 @@
+# Global Docker build context exclusions
+**/build/
+**/bin/
+.gradle/
+.git/
+.idea/
+.vscode/
+.DS_Store

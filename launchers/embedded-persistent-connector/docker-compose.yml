@@ -3,8 +3,8 @@ name: minimal-connector
 services:
   connector:
     build:
-      context: .
-      dockerfile: src/main/docker/Dockerfile
+      context: ../..
+      dockerfile: launchers/embedded-persistent-connector/src/main/docker/Dockerfile
       args:
         JAR: minimal-connector.jar
     image: minimal-connector:latest

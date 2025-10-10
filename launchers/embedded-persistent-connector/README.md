@@ -20,6 +20,8 @@ un runtime EDC básico con un único servidor HTTP y un endpoint de health.
 ```
 Resultado: `build/libs/minimal-connector.jar`.
 
+> Usa este comando solo si necesitas el JAR localmente o quieres producir la imagen sin arrancar el contenedor. Para levantar Docker no hace falta: el propio `docker compose up -d --build` ejecuta Gradle por ti. La primera build dentro de Docker tarda ~2 minutos mientras Gradle descarga dependencias; verás un mensaje informativo para confirmar que sigue trabajando.
+
 ## Ejecutar en Host
 ```
 java -jar launchers/embedded-persistent-connector/build/libs/minimal-connector.jar -Dedc.fs.config=launchers/embedded-persistent-connector/configuration.properties
@@ -33,20 +35,28 @@ curl http://localhost:8181/api/health
 ## Docker / Compose
 El `docker-compose.yml` declara `name: minimal-connector` para que el contenedor se denomine `minimal-connector-connector-1`.
 
+### Primera vez (build + run)
 ```
-docker compose up --build
+docker compose up -d --build
 ```
-Luego:
+- Este comando construye la imagen **y** deja el contenedor corriendo. La parte de build tarda ~2 minutos la primera vez porque Gradle descarga dependencias; verás un mensaje indicando que sigue compilando.
+- Usar `--build` es suficiente para generar el artefacto dentro de la imagen, no necesitas ejecutar Gradle manualmente.
+
+Verifica el endpoint de health:
 ```
 curl http://localhost:8181/api/health
 ```
 
-Logs esperados: mensaje indicando recepción de la petición de health.
+### Ejecuciones posteriores (sin rebuild)
+```
+docker compose up -d
+```
+Gradle ya no se lanza y el arranque es casi inmediato. Solo vuelve a usar `--build` si cambias código o configuración y necesitas regenerar la imagen.
 
-Si ves advertencia de "orphan containers" (por restos anteriores):
-```
-docker compose down --remove-orphans
-```
+### Otros comandos útiles
+- Ver logs: `docker compose logs -f`
+- Detener: `docker compose down`
+- Limpiar contenedores huérfanos de ejecuciones previas: `docker compose down --remove-orphans`
 
 La raíz incluye `.dockerignore` para reducir el contexto de build.
 
