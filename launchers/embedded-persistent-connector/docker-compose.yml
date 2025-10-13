@@ -23,13 +23,14 @@ services:
     restart: unless-stopped
     depends_on:
       - connector-db
+    extra_hosts:
+      - "provider-controlplane:host-gateway"
     volumes:
       - ./configuration.properties:/app/configuration.properties:ro
       - ./logging.properties:/app/logging.properties:ro
       - ./logs:/app/logs
     environment:
       EDC_HOSTNAME: connector
-      EDC_RUNTIME_ID: minimal-connector
       EDC_PARTICIPANT_ID: did:web:provider-identityhub%3A7093
       EDC_IAM_ISSUER_ID: did:web:provider-identityhub%3A7093
       EDC_IAM_DID_WEB_USE_HTTPS: "false"

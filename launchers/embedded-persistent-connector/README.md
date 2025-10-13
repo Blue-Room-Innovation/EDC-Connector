@@ -51,7 +51,9 @@ Resultado: `build/libs/minimal-connector.jar`.
 ## Docker / Compose
 El `docker-compose.yml` lanza dos servicios:
 - `connector-db`: Postgres 15 con credenciales `connector/connector` y base `minimal_connector` (volumen `connector_db_data`).
-- `connector`: runtime EDC que compila el jar en build y se conecta al Postgres anterior.
+- `connector`: runtime EDC que compila el jar en build y se conecta al Postgres anterior. El runtime id se asigna automáticamente (no necesitas configurar `edc.runtime.id`).
+
+> Nota: el compose añade `extra_hosts` con `provider-controlplane:host-gateway` para que el contenedor resuelva el endpoint DSP publicado por el escenario i2cat en el host (`localhost:8282`). Si cambias los puertos expuestos por el escenario, actualiza esta entrada o la URL de los `curl` más adelante.
 
 ### Primera vez (build + run)
 ```
@@ -70,6 +72,18 @@ Management API (clave `edc-dev`):
 ```
 curl -H "x-api-key: edc-dev" http://localhost:9081/api/management/v3/assets
 ```
+
+Sembrar un asset de ejemplo + policy + contract:
+```
+./scripts/publish-sample-asset.sh
+```
+> Requiere `curl` y `jq` en el host. Usa las variables de entorno `BASE_URL`, `API_KEY`, `ASSET_ID`, etc. si necesitas valores distintos.
+
+Solicitar el catálogo al proveedor i2cat con la configuración por defecto:
+```
+./scripts/request-provider-catalog.sh
+```
+> Personaliza `COUNTERPARTY_URL`, `COUNTERPARTY_ID` o `MANAGEMENT_URL` si tu despliegue expone otros puertos u hospederos.
 
 ### Ejecuciones posteriores (sin rebuild)
 ```
@@ -111,16 +125,16 @@ Puedes sobrescribir cualquier clave:
 	 Deberías ver `Runtime ... ready` en los logs de Docker y la Management API devolverá una lista vacía si aún no tienes assets.
 4. Comunicación con el stack i2cat:
 	 - El vault y el STS se resuelven vía `host.docker.internal:{8400,8582}` desde el contenedor `connector` (el compose ya expone esas URLs).
-	 - El DSP de i2cat es alcanzable en `http://localhost:8282/api/dsp`. Cuando emitas tus credenciales, podrás lanzar un `catalog` con:
+	 - El DSP de i2cat es alcanzable en `http://localhost:8282/api/dsp` (el alias `provider-controlplane` apunta al host gracias a `extra_hosts`). Cuando emitas tus credenciales, podrás lanzar un `catalog` con:
 		 ```
 			 curl -H "x-api-key: edc-dev" -H "Content-Type: application/json" \
-				 -d '{
-							"@context": {"@vocab":"https://w3id.org/edc/v0.0.1/ns/"},
-							"@type":"CatalogRequest",
-							"counterPartyAddress":"http://host.docker.internal:8282/api/dsp",
-							"counterPartyId":"did:web:provider-identityhub%3A7093",
-							"protocol":"dataspace-protocol-http"
-						}' \
+			 -d '{
+					"@context": {"@vocab":"https://w3id.org/edc/v0.0.1/ns/"},
+					"@type":"CatalogRequest",
+					"counterPartyAddress":"http://provider-controlplane:8082/api/dsp",
+					"counterPartyId":"did:web:provider-identityhub%3A7093",
+					"protocol":"dataspace-protocol-http"
+				}' \
 			 http://localhost:9081/api/management/v3/catalog/request
 		 ```
 		 Mientras no exista un VC emitido recibirás un `401/403` desde el proveedor; una vez que el Identity Hub te firme uno, el flujo continuará y obtendrás el catálogo remoto.

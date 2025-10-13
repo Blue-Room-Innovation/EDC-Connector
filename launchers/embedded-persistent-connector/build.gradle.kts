@@ -22,14 +22,21 @@ dependencies {
     implementation(project(":extensions:common:json-ld"))
     implementation(project(":extensions:common:iam:decentralized-identity"))
     implementation(project(":extensions:common:iam:identity-trust"))
+    implementation(project(":extensions:common:transaction:transaction-local"))
+    implementation(project(":extensions:common:sql:sql-pool:sql-pool-apache-commons"))
 
     // Control Plane completo (DSP, APIs, identidad, autenticación básica)
-    implementation(project(":data-protocols:dsp"))
+    implementation(project(":data-protocols:dsp:dsp-http-core"))
     implementation(project(":data-protocols:dsp:dsp-http-api-configuration"))
+    implementation(project(":data-protocols:dsp:dsp-catalog"))
+    implementation(project(":data-protocols:dsp:dsp-negotiation"))
+    implementation(project(":data-protocols:dsp:dsp-transfer-process"))
+    implementation(project(":data-protocols:dsp:dsp-version:dsp-version-http-api"))
     implementation(project(":dist:bom:controlplane-dcp-bom"))
 
     // Persistencia SQL para stores de control plane y selectores
     implementation(project(":dist:bom:controlplane-feature-sql-bom"))
+    implementation(project(":extensions:control-plane:store:sql:control-plane-sql"))
 
     // HTTP server (Jetty + Jersey) y WebService
     implementation(project(":extensions:common:http"))

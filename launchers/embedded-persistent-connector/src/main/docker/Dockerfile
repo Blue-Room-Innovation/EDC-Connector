@@ -13,6 +13,8 @@ COPY core core
 COPY extensions extensions
 COPY resources resources
 COPY spi spi
+COPY data-protocols data-protocols
+COPY dist dist
 COPY launchers launchers
 
 RUN sed -i 's/\r$//' gradlew \
@@ -34,4 +36,4 @@ RUN mkdir -p /app/logs
 EXPOSE 8181
 ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx256m -Djava.util.logging.config.file=/app/logging.properties"
 
-ENTRYPOINT ["java","-jar","app.jar","-Dedc.fs.config=configuration.properties"]
+ENTRYPOINT ["java","-Dedc.fs.config=configuration.properties","-jar","app.jar"]

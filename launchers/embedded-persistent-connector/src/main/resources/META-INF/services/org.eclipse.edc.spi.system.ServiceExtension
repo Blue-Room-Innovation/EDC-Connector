@@ -1,2 +1,3 @@
 org.eclipse.edc.extension.health.HealthEndpointExtension
 org.eclipse.edc.extension.protocol.ProtocolApiConfigurationExtension
+org.eclipse.edc.extension.scope.DefaultScopeExtension
