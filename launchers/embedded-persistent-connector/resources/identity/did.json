@@ -1,23 +1,30 @@
 {
-  "id": "did:web:minimal-connector.local",
-  "controller": "did:web:minimal-connector.local",
+  "id": "did:web:connector%3A8282",
+  "controller": "did:web:connector%3A8282",
   "verificationMethod": [
     {
-      "id": "did:web:minimal-connector.local#key-1",
+      "id": "did:web:connector%3A8282#key-1",
       "type": "JsonWebKey2020",
-      "controller": "did:web:minimal-connector.local",
+      "controller": "did:web:connector%3A8282",
       "publicKeyJwk": {
         "kty": "EC",
         "crv": "P-256",
-        "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "y": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        "x": "E_MwgcIxXgCeopZDJ5Il6IvOVBuBR3FOBQg95WpII-c",
+        "y": "TL6BkDmouh23tJlzyyY_RtCxyU4Ube59T2KD5qOunAs"
       }
     }
   ],
   "authentication": [
-    "did:web:minimal-connector.local#key-1"
+    "did:web:connector%3A8282#key-1"
   ],
   "assertionMethod": [
-    "did:web:minimal-connector.local#key-1"
+    "did:web:connector%3A8282#key-1"
+  ],
+  "service": [
+    {
+      "id": "did:web:connector%3A8282#dsp",
+      "type": "DspEndpoint",
+      "serviceEndpoint": "http://connector:8282/api/dsp"
+    }
   ]
 }
