@@ -53,6 +53,9 @@ launchers/demo-e2e/edc-config.properties
 runtime_settings.properties
 generated_backend.tf
  
+# Mantener la configuración del embedded persistent connector versionada
+!/launchers/embedded-persistent-connector/.env
+
 # --- Generated class/output dirs not previously ignored ---
 **/bin/
 **/bin

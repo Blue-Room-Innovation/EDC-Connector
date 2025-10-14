@@ -1,0 +1,23 @@
+{
+  "id": "did:web:minimal-connector.local",
+  "controller": "did:web:minimal-connector.local",
+  "verificationMethod": [
+    {
+      "id": "did:web:minimal-connector.local#key-1",
+      "type": "JsonWebKey2020",
+      "controller": "did:web:minimal-connector.local",
+      "publicKeyJwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "y": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+      }
+    }
+  ],
+  "authentication": [
+    "did:web:minimal-connector.local#key-1"
+  ],
+  "assertionMethod": [
+    "did:web:minimal-connector.local#key-1"
+  ]
+}
