@@ -40,7 +40,7 @@ services:
       EDC_DATASOURCE_DEFAULT_USER: connector
       EDC_DATASOURCE_DEFAULT_PASSWORD: connector
       EDC_SQL_SCHEMA_AUTOCREATE: "true"
-      EDC_VAULT_HASHICORP_URL: http://host.docker.internal:8400
+      EDC_VAULT_HASHICORP_URL: http://provider-vault:8200
       EDC_VAULT_HASHICORP_TOKEN: root
       EDC_IAM_STS_OAUTH_TOKEN_URL: http://host.docker.internal:8582/api/sts/token
       EDC_IAM_STS_OAUTH_CLIENT_ID: did:web:provider-identityhub%3A7093
@@ -67,7 +67,15 @@ services:
       - "9082:8282" # DSP protocol
       - "9083:8283" # Control API
       - "9084:8284" # Catalog API
+    networks:
+      - default
+      - edc-scenario
     # Para limpiar contenedores huérfanos de versiones previas: `docker compose down --remove-orphans`
 
 volumes:
   connector_db_data:
+
+networks:
+  edc-scenario:
+    external: true
+    name: edc-scenario-main_default
