@@ -1,28 +1,44 @@
+/*
+*  Copyright (c) 2023 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+*
+*  This program and the accompanying materials are made available under the
+*  terms of the Apache License, Version 2.0 which is available at
+*  https://www.apache.org/licenses/LICENSE-2.0
+*
+*  SPDX-License-Identifier: Apache-2.0
+*
+*  Contributors:
+*       Bayerische Motoren Werke Aktiengesellschaft (BMW AG) - Initial API and Implementation
+*
+*/
+
 plugins {
     `java-library`
     id("application")
+    alias(libs.plugins.shadow)
 }
 
 dependencies {
-    implementation(project(":core:data-plane:data-plane-core"))
-    implementation(project(":core:common:connector-core"))
-    implementation(project(":extensions:common:vault:vault-hashicorp"))
-    implementation(project(":extensions:common:monitor:monitor-jdk-logger"))
-    implementation(project(":extensions:common:configuration:configuration-filesystem"))
-    implementation(project(":extensions:common:sql:sql-core"))
-    implementation(project(":extensions:common:sql:sql-bootstrapper"))
-    implementation(project(":extensions:common:sql:sql-lease"))
-    implementation(project(":extensions:common:sql:sql-pool:sql-pool-apache-commons"))
-    implementation(libs.edc-runtime-metamodel)
-    // Agrega aquí cualquier otra dependencia relevante de tu catálogo
-}
+    runtimeOnly(libs.edc.bom.dataplane)
+    runtimeOnly(libs.edc.dataplane.v2)
 
-application {
-    mainClass.set("org.eclipse.edc.boot.system.runtime.BaseRuntime")
+    if (project.properties.getOrDefault("persistence", "false") == "true") {
+        runtimeOnly(libs.edc.vault.hashicorp)
+        runtimeOnly(libs.edc.bom.dataplane.sql)
+        println("This runtime compiles with a remote STS client, Hashicorp Vault and PostgreSQL. You will need properly configured Postgres and HCV instances.")
+    }
 }
 
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     exclude("**/pom.properties", "**/pom.xml")
     mergeServiceFiles()
     archiveFileName.set("${project.name}.jar")
+}
+
+application {
+    mainClass.set("org.eclipse.edc.boot.system.runtime.BaseRuntime")
+}
+
+edcBuild {
+    publish.set(false)
 }
