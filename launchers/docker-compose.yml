@@ -1,6 +1,7 @@
 version: "3.8"
 services:
   controlplane:
+    container_name: edc-controlplane
     image: edc-controlplane
     build:
       context: ./controlplane/src/main/docker
@@ -13,6 +14,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/edc
       - VAULT_ADDR=http://vault:8200
   dataplane:
+    container_name: edc-dataplane
     image: edc-dataplane
     build:
       context: ./dataplane/src/main/docker
@@ -25,6 +27,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/edc
       - VAULT_ADDR=http://vault:8200
   identity-hub:
+    container_name: edc-identity-hub
     image: edc-identity-hub
     build:
       context: ./identity-hub/src/main/docker
@@ -37,6 +40,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/edc
       - VAULT_ADDR=http://vault:8200
   vault:
+    container_name: edc-vault
     image: hashicorp/vault:1.15.2
     ports:
       - "8200:8200"
@@ -45,6 +49,7 @@ services:
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
     command: "server -dev -dev-root-token-id=root"
   postgres:
+    container_name: edc-postgres
     image: postgres:15
     ports:
       - "5432:5432"
