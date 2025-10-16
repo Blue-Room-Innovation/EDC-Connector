@@ -227,6 +227,9 @@ include(":extensions:policy-monitor:store:sql:policy-monitor-store-sql")
 include(":launchers:dpf-selector")
 include(":launchers:sts-server")
 include(":launchers:embedded-persistent-connector")
+include(":launchers:controlplane")
+include(":launchers:dataplane")
+include(":launchers:identity-hub")
 
 // extension points for a connector ----------------------------------------------------------------
 include(":spi:common:auth-spi")
