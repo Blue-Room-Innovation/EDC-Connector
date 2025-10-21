@@ -21,7 +21,6 @@ import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
-import org.eclipse.edc.iam.did.spi.document.DidDocument;
 import org.eclipse.edc.keys.keyparsers.PemParser;
 import org.eclipse.edc.security.token.jwt.CryptoConverter;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -34,9 +33,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.security.KeyPair;
 import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
@@ -54,23 +51,20 @@ import static org.mockito.Mockito.mock;
 @SuppressWarnings("NewClassNamingConvention")
 public class JwtSigner {
 
-    public static final String ISSUER_PRIVATE_KEY_FILE_PATH = System.getProperty("user.dir") + "/../../deployment/assets/issuer_private.pem";
-    public static final String ISSUER_PUBLIC_KEY_FILE_PATH = System.getProperty("user.dir") + "/../../deployment/assets/issuer_public.pem";
-    public static final File ISSUER_DID_DOCUMENT_LOCAL = new File(System.getProperty("user.dir") + "/../../deployment/assets/issuer/did.docker.json");
-    public static final File ISSUER_DID_DOCUMENT_K8S = new File(System.getProperty("user.dir") + "/../../deployment/assets/issuer/did.k8s.json");
-    public static final String DATASPACE_ISSUER_DID_LOCAL = "did:web:localhost%3A9876";
-    public static final String DATASPACE_ISSUER_DID_K8S = "did:web:dataspace-issuer";
+    private static final String USER_DIR = System.getProperty("user.dir");
+    public static final String ISSUER_PRIVATE_KEY_FILE_PATH = USER_DIR + "/../../deployment/assets/private.pem";
+    public static final String ISSUER_PUBLIC_KEY_FILE_PATH = USER_DIR + "/../../deployment/assets/public.pem";
+    // No hay issuer DID document, así que lo omitimos en la prueba
+    public static final String DATASPACE_ISSUER_DID_LOCAL = "did:web:identityhub";
     private final ObjectMapper mapper = new ObjectMapper();
 
     @ParameterizedTest
     @ArgumentsSource(InputOutputProvider.class)
     void generateJwt(String rawCredentialFilePath, File vcResource, String did, String issuerDid, File issuerDidDocument) throws JOSEException, IOException {
-
-        var header = new JWSHeader.Builder(JWSAlgorithm.EdDSA)
+        var header = new JWSHeader.Builder(JWSAlgorithm.RS256)
                 .keyID(issuerDid + "#key-1")
                 .type(JOSEObjectType.JWT)
                 .build();
-
 
         var credential = mapper.readValue(new File(rawCredentialFilePath), Map.class);
 
@@ -82,34 +76,25 @@ public class JwtSigner {
                 .issueTime(Date.from(Instant.now()))
                 .build();
 
-        // this must be the path to the Credential issuer's private key
+        // Usar las claves presentes en assets
         var privateKey = (PrivateKey) new PemParser(mock()).parse(readFile(ISSUER_PRIVATE_KEY_FILE_PATH)).orElseThrow(f -> new RuntimeException(f.getFailureDetail()));
-        var publicKey = (PublicKey) new PemParser(mock()).parse(readFile(ISSUER_PUBLIC_KEY_FILE_PATH)).orElseThrow(f -> new RuntimeException(f.getFailureDetail()));
 
-        // sign raw credentials with new issuer public key
+        // Firmar el JWT
         var jwt = new SignedJWT(header, claims);
         jwt.sign(CryptoConverter.createSignerFor(privateKey));
 
-        // replace the "rawVc" field in the VC resources file, so that it gets seeded to the database
+        // Actualizar el campo "rawVc" en el archivo de credencial
         var content = Files.readString(vcResource.toPath());
         var updatedContent = content.replaceFirst("\"rawVc\":.*,", "\"rawVc\": \"%s\",".formatted(jwt.serialize()));
         Files.write(vcResource.toPath(), updatedContent.getBytes());
-
-        // update issuer DID document with new public key
-        var issuerJwk = CryptoConverter.createJwk(new KeyPair(publicKey, null));
-        var didDoc = mapper.readValue(issuerDidDocument, DidDocument.class);
-
-        var issuerPk = didDoc.getVerificationMethod().get(0).getPublicKeyJwk();
-        issuerPk.clear();
-        issuerPk.putAll(issuerJwk.toPublicJWK().toJSONObject());
-        Files.write(issuerDidDocument.toPath(), mapper.writeValueAsBytes(didDoc));
+        // No se actualiza issuer DID document porque no existe en assets
     }
 
     private String readFile(String path) {
         try {
             return Files.readString(Paths.get(path));
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Error leyendo archivo: " + path, e);
         }
     }
 
@@ -117,41 +102,13 @@ public class JwtSigner {
         @Override
         public Stream<? extends Arguments> provideArguments(ExtensionContext extensionContext) {
             return Stream.of(
+                Arguments.of(USER_DIR + "/../../deployment/assets/credentials/membership-credential.json",
+                    new File(USER_DIR + "/../../deployment/assets/credentials/membership-credential.json"),
+                    DATASPACE_ISSUER_DID_LOCAL, DATASPACE_ISSUER_DID_LOCAL, null),
 
-                    // PROVIDER credentials, K8S and local
-                    Arguments.of(System.getProperty("user.dir") + "/../../deployment/assets/credentials/k8s/provider/membership_vc.json",
-                            new File(System.getProperty("user.dir") + "/../../deployment/assets/credentials/k8s/provider/membership-credential.json"),
-                            "did:web:provider-identityhub%3A7083:bob", DATASPACE_ISSUER_DID_K8S, ISSUER_DID_DOCUMENT_K8S),
-
-                    Arguments.of(System.getProperty("user.dir") + "/../../deployment/assets/credentials/k8s/provider/dataprocessor_vc.json",
-                            new File(System.getProperty("user.dir") + "/../../deployment/assets/credentials/k8s/provider/dataprocessor-credential.json"),
-                            "did:web:provider-identityhub%3A7083:bob", DATASPACE_ISSUER_DID_K8S, ISSUER_DID_DOCUMENT_K8S),
-
-                    Arguments.of(System.getProperty("user.dir") + "/../../deployment/assets/credentials/local/provider/unsigned/membership_vc.json",
-                            new File(System.getProperty("user.dir") + "/../../deployment/assets/credentials/local/provider/membership-credential.json"),
-                            "did:web:provider-identityhub%3A7083:bob", DATASPACE_ISSUER_DID_LOCAL, ISSUER_DID_DOCUMENT_LOCAL),
-
-                    Arguments.of(System.getProperty("user.dir") + "/../../deployment/assets/credentials/local/provider/unsigned/dataprocessor_vc.json",
-                            new File(System.getProperty("user.dir") + "/../../deployment/assets/credentials/local/provider/dataprocessor-credential.json"),
-                            "did:web:provider-identityhub%3A7083:bob", DATASPACE_ISSUER_DID_LOCAL, ISSUER_DID_DOCUMENT_LOCAL),
-
-                    // CONSUMER credentials, K8S and local
-                    Arguments.of(System.getProperty("user.dir") + "/../../deployment/assets/credentials/k8s/consumer/membership_vc.json",
-                            new File(System.getProperty("user.dir") + "/../../deployment/assets/credentials/k8s/consumer/membership-credential.json"),
-                            "did:web:consumer-identityhub%3A7083:alice", DATASPACE_ISSUER_DID_K8S, ISSUER_DID_DOCUMENT_K8S),
-
-                    Arguments.of(System.getProperty("user.dir") + "/../../deployment/assets/credentials/k8s/consumer/dataprocessor_vc.json",
-                            new File(System.getProperty("user.dir") + "/../../deployment/assets/credentials/k8s/consumer/dataprocessor-credential.json"),
-                            "did:web:consumer-identityhub%3A7083:alice", DATASPACE_ISSUER_DID_K8S, ISSUER_DID_DOCUMENT_K8S),
-
-                    Arguments.of(System.getProperty("user.dir") + "/../../deployment/assets/credentials/local/consumer/unsigned/membership_vc.json",
-                            new File(System.getProperty("user.dir") + "/../../deployment/assets/credentials/local/consumer/membership-credential.json"),
-                            "did:web:consumer-identityhub%3A7083:alice", DATASPACE_ISSUER_DID_LOCAL, ISSUER_DID_DOCUMENT_LOCAL),
-
-                    Arguments.of(System.getProperty("user.dir") + "/../../deployment/assets/credentials/local/consumer/unsigned/dataprocessor_vc.json",
-                            new File(System.getProperty("user.dir") + "/../../deployment/assets/credentials/local/consumer/dataprocessor-credential.json"),
-                            "did:web:consumer-identityhub%3A7083:alice", DATASPACE_ISSUER_DID_LOCAL, ISSUER_DID_DOCUMENT_LOCAL)
-
+                Arguments.of(USER_DIR + "/../../deployment/assets/credentials/dataprocessor-credential.json",
+                    new File(USER_DIR + "/../../deployment/assets/credentials/dataprocessor-credential.json"),
+                    DATASPACE_ISSUER_DID_LOCAL, DATASPACE_ISSUER_DID_LOCAL, null)
             );
         }
     }

@@ -1,44 +1,82 @@
-version: "3.8"
+name: edc-connector
 services:
   controlplane:
     container_name: edc-controlplane
-    image: edc-controlplane
     build:
-      context: ./controlplane/src/main/docker
+      context: ./controlplane
+      dockerfile: src/main/docker/Dockerfile
+      args:
+        JAR: build/libs/controlplane.jar
+    image: edc-controlplane:latest
+    restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8280:8280"
+      - "8281:8281"
+      - "8282:8282"
+      - "8283:8283"
+      - "8284:8284"
+      - "8285:8285"
+    volumes:
+      - ./controlplane/configuration.properties:/app/configuration.properties:ro
+      - ./controlplane/logging.properties:/app/logging.properties:ro
+      - ../deployment/assets/participants/participants.local.json:/etc/participants/participants.json:ro
     depends_on:
-      - postgres
-      - vault
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/edc
-      - VAULT_ADDR=http://vault:8200
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_started
+
   dataplane:
     container_name: edc-dataplane
-    image: edc-dataplane
     build:
-      context: ./dataplane/src/main/docker
-    ports:
-      - "8081:8081"
+      context: ./dataplane
+      dockerfile: src/main/docker/Dockerfile
+      args:
+        JAR: build/libs/dataplane.jar
+    image: edc-dataplane:latest
+    restart: unless-stopped
     depends_on:
-      - postgres
-      - vault
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/edc
-      - VAULT_ADDR=http://vault:8200
+      controlplane:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+      - "8290:8290"
+    volumes:
+      - ./dataplane/configuration.properties:/app/configuration.properties:ro
+      - ./dataplane/logging.properties:/app/logging.properties:ro
+
   identity-hub:
     container_name: edc-identity-hub
-    image: edc-identity-hub
     build:
-      context: ./identity-hub/src/main/docker
-    ports:
-      - "8082:8082"
-    depends_on:
-      - postgres
-      - vault
+      context: ./identity-hub
+      dockerfile: src/main/docker/Dockerfile
+      args:
+        JAR: build/libs/identity-hub.jar
+    image: edc-identity-hub:latest
+    restart: unless-stopped
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/edc
-      - VAULT_ADDR=http://vault:8200
+      - ENV_JVM_ARGS=-Dedc.fs.config=/app/configuration.properties -Djava.util.logging.config.file=/app/logging.properties
+    ports:
+      - "8380:8080"
+      - "8381:8281"
+      - "8382:8282"
+      - "8383:8283"
+      - "8385:8285"
+      - "8386:8286"
+    volumes:
+      - ./identity-hub/configuration.properties:/app/configuration.properties:ro
+      - ./identity-hub/logging.properties:/app/logging.properties:ro
+      - ../deployment/assets/public.pem:/app/deployment/assets/public.pem:ro
+      - ../deployment/assets/private.pem:/app/deployment/assets/private.pem:ro
+      - ../deployment/assets/credentials:/app/deployment/assets/credentials:ro
+    depends_on:
+      vault:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
   vault:
     container_name: edc-vault
     image: hashicorp/vault:1.15.2
@@ -48,6 +86,7 @@ services:
       - VAULT_DEV_ROOT_TOKEN_ID=root
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
     command: "server -dev -dev-root-token-id=root"
+
   postgres:
     container_name: edc-postgres
     image: postgres:15
@@ -57,7 +96,13 @@ services:
       - POSTGRES_DB=edc
       - POSTGRES_USER=edc
       - POSTGRES_PASSWORD=edc
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
+
 volumes:
   pgdata:
