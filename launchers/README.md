@@ -54,8 +54,10 @@ The script is idempotent; re-run it whenever you reset the Docker volumes or rot
 ```powershell
 docker exec edc-vault sh -lc "\
   export VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root; \
-  vault kv put secret/did:web:localhost%3A8281-sts-client-secret content=change-me"
+  vault kv put secret/did:web:host.docker.internal%3A9483-sts-client-secret content=change-me"
 ```
+
+> Nota: asegúrate de renovar las credenciales bajo `deployment/assets/credentials/` para el DID configurado solicitándolas de nuevo al issuer del dataspace antes de negociar contratos.
 
 ## 5. Verify the runtimes
 
