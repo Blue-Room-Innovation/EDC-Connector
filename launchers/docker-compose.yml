@@ -1,6 +1,8 @@
+# Local connector stack: spins up control plane, data plane, identity hub plus supporting services.
 name: edc-connector
 services:
   controlplane:
+    # Core runtime exposing management, protocol, catalog and health APIs.
     container_name: edc-controlplane
     build:
       context: ./controlplane
@@ -10,6 +12,7 @@ services:
     image: edc-controlplane:latest
     restart: unless-stopped
     ports:
+      # Host:Container mappings keep the same 828x port range used by configuration.properties.
       - "8280:8280"
       - "8281:8281"
       - "8282:8282"
@@ -17,16 +20,19 @@ services:
       - "8284:8284"
       - "8285:8285"
     volumes:
+      # Mount local configuration/logging plus the participant directory shared with MVD scenarios.
       - ./controlplane/configuration.properties:/app/configuration.properties:ro
       - ./controlplane/logging.properties:/app/logging.properties:ro
       - ../deployment/assets/participants/participants.local.json:/etc/participants/participants.json:ro
     depends_on:
+      # Start once backing services (database + vault) are ready.
       postgres:
         condition: service_healthy
       vault:
         condition: service_started
 
   dataplane:
+    # Moves data between providers/consumers. Registers with the control plane via selector API.
     container_name: edc-dataplane
     build:
       context: ./dataplane
@@ -36,18 +42,22 @@ services:
     image: edc-dataplane:latest
     restart: unless-stopped
     depends_on:
+      # Requires a healthy control plane (for selector) and database (for persistence).
       controlplane:
         condition: service_healthy
       postgres:
         condition: service_healthy
     ports:
+      # Expose REST API on 8081 (maps to container 8080) and the public transfer endpoint on 8290.
       - "8081:8080"
       - "8290:8290"
     volumes:
+      # Provide runtime configuration/logging from the launcher directory.
       - ./dataplane/configuration.properties:/app/configuration.properties:ro
       - ./dataplane/logging.properties:/app/logging.properties:ro
 
   identity-hub:
+    # Issues/verifies credentials and exposes STS/DID services required by the control plane.
     container_name: edc-identity-hub
     build:
       context: ./identity-hub
@@ -57,8 +67,10 @@ services:
     image: edc-identity-hub:latest
     restart: unless-stopped
     environment:
+      # Route filesystem-based config and logging settings into the shaded launcher.
       - ENV_JVM_ARGS=-Dedc.fs.config=/app/configuration.properties -Djava.util.logging.config.file=/app/logging.properties
     ports:
+      # Publish the hub APIs on the 838x range to avoid clashing with the control plane.
       - "8380:8080"
       - "8381:8281"
       - "8382:8282"
@@ -66,18 +78,21 @@ services:
       - "8385:8285"
       - "8386:8286"
     volumes:
+      # Mount configuration, logging and the key/credential material required for DID operations.
       - ./identity-hub/configuration.properties:/app/configuration.properties:ro
       - ./identity-hub/logging.properties:/app/logging.properties:ro
       - ../deployment/assets/public.pem:/app/deployment/assets/public.pem:ro
       - ../deployment/assets/private.pem:/app/deployment/assets/private.pem:ro
       - ../deployment/assets/credentials:/app/deployment/assets/credentials:ro
     depends_on:
+      # Needs Vault for secrets and PostgreSQL for persistence.
       vault:
         condition: service_started
       postgres:
         condition: service_healthy
 
   vault:
+    # Dev-mode HashiCorp Vault storing secrets such as STS client credentials.
     container_name: edc-vault
     image: hashicorp/vault:1.15.2
     ports:
@@ -88,6 +103,7 @@ services:
     command: "server -dev -dev-root-token-id=root"
 
   postgres:
+    # Shared PostgreSQL database backing the control plane, dataplane and identity hub.
     container_name: edc-postgres
     image: postgres:15
     ports:
@@ -105,4 +121,5 @@ services:
       - pgdata:/var/lib/postgresql/data
 
 volumes:
+  # Persist database data between container restarts.
   pgdata:
