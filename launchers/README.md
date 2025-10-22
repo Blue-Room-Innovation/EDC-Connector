@@ -40,17 +40,22 @@ docker compose up -d
 
 > `docker compose up -d` builds the remaining images if required and starts: controlplane, dataplane, identity-hub, postgres and vault.
 
-## 4. Seed the STS secret in Vault (first run only)
+## 4. Seed the local Identity Hub and Vault (first run only)
 
-After the stack is running, store the STS client secret in the dev Vault so that the control plane can request tokens:
+Run the helper script to create the launcher participant, publish its DID and store the required secrets in Vault:
+
+```bash
+cd C:\repos\dataspaces\EDC-Connector\launchers
+bash seed-local.sh
+```
+
+The script is idempotent; re-run it whenever you reset the Docker volumes or rotate the API key. If you prefer to execute the steps manually, remember that Hashicorp Vault expects secrets under the `content` key:
 
 ```powershell
 docker exec edc-vault sh -lc "\
   export VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root; \
-  vault kv put secret/did:web:localhost%3A8281-sts-client-secret value=change-me"
+  vault kv put secret/did:web:localhost%3A8281-sts-client-secret content=change-me"
 ```
-
-You can repeat with a different value at any time; the control plane reads it at runtime.
 
 ## 5. Verify the runtimes
 
