@@ -13,9 +13,9 @@ log() {
     printf '[seed-local] %s\n' "$*"
 }
 
-IDENTITY_API="http://localhost:8382/api/identity/v1alpha"
-CREDENTIAL_SERVICE_BASE="http://localhost:8381"
-CONTROLPLANE_BASE="http://localhost:8282"
+IDENTITY_API="http://localhost:9482/api/identity/v1alpha"
+CREDENTIAL_SERVICE_BASE="http://localhost:9481"
+CONTROLPLANE_BASE="http://localhost:9282"
 PARTICIPANT_DID="${PARTICIPANT_DID:-did:web:localhost%3A8281}"
 SUPERUSER_API_KEY="${SUPERUSER_API_KEY:-c3VwZXItdXNlcg==.c3VwZXItc2VjcmV0LWtleQo=}"
 STS_SECRET_VALUE="${STS_SECRET_VALUE:-change-me}"
@@ -29,6 +29,26 @@ docker exec edc-vault sh -lc "\
 log "Stored super-user API key and STS secret in edc-vault"
 
 PARTICIPANT_DID_B64=$(printf '%s' "${PARTICIPANT_DID}" | base64 | tr -d '\n')
+
+log "Waiting for Identity Hub API on ${IDENTITY_API}..."
+set +e
+READY=0
+for attempt in {1..30}; do
+  HTTP_CHECK=$(curl -sS -o /dev/null -w "%{http_code}" \
+    -H "X-API-Key: ${SUPERUSER_API_KEY}" \
+    "${IDENTITY_API}/dids" 2>/dev/null)
+  if [[ "${HTTP_CHECK}" =~ ^(200|204|401|404)$ ]]; then
+    READY=1
+    break
+  fi
+  sleep 2
+done
+set -e
+
+if [[ "${READY}" -ne 1 ]]; then
+  printf 'Identity Hub did not become reachable at %s (last HTTP %s)\n' "${IDENTITY_API}" "${HTTP_CHECK}" >&2
+  exit 1
+fi
 
 read -r -d '' PARTICIPANT_PAYLOAD <<JSON
 {
@@ -60,11 +80,20 @@ read -r -d '' PARTICIPANT_PAYLOAD <<JSON
 JSON
 
 CREATE_RESPONSE=$(mktemp)
+set +e
 HTTP_CODE=$(curl -sS -o "${CREATE_RESPONSE}" -w "%{http_code}" \
   -H 'Content-Type: application/json' \
   -H "X-API-Key: ${SUPERUSER_API_KEY}" \
   -d "${PARTICIPANT_PAYLOAD}" \
-  "${IDENTITY_API}/participants/")
+  "${IDENTITY_API}/participants/" 2>/dev/null)
+CURL_STATUS=$?
+set -e
+if [[ "${CURL_STATUS}" -ne 0 ]]; then
+  printf 'Error contacting Identity Hub to create participant (curl exit %s)\n' "${CURL_STATUS}" >&2
+  cat "${CREATE_RESPONSE}" >&2 || true
+  rm -f "${CREATE_RESPONSE}"
+  exit 1
+fi
 
 case "${HTTP_CODE}" in
   201)
@@ -83,9 +112,16 @@ esac
 
 rm -f "${CREATE_RESPONSE}"
 
+set +e
 ACTIVATE_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
   -X PATCH "${IDENTITY_API}/participants/${PARTICIPANT_DID}/state?isActive=true" \
-  -H "X-API-Key: ${SUPERUSER_API_KEY}")
+  -H "X-API-Key: ${SUPERUSER_API_KEY}" 2>/dev/null)
+CURL_STATUS=$?
+set -e
+if [[ "${CURL_STATUS}" -ne 0 ]]; then
+  printf 'Error activating participant (curl exit %s)\n' "${CURL_STATUS}" >&2
+  exit 1
+fi
 
 if [[ "${ACTIVATE_CODE}" =~ ^(200|204)$ ]]; then
   log "Participant marked as active"
@@ -94,9 +130,16 @@ else
   exit 1
 fi
 
+set +e
 PUBLISH_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
   -X POST "${IDENTITY_API}/participants/${PARTICIPANT_DID}/dids/publish" \
-  -H "X-API-Key: ${SUPERUSER_API_KEY}")
+  -H "X-API-Key: ${SUPERUSER_API_KEY}" 2>/dev/null)
+CURL_STATUS=$?
+set -e
+if [[ "${CURL_STATUS}" -ne 0 ]]; then
+  printf 'Error publishing DID (curl exit %s)\n' "${CURL_STATUS}" >&2
+  exit 1
+fi
 
 if [[ "${PUBLISH_CODE}" =~ ^(200|204)$ ]]; then
   log "Participant DID published"

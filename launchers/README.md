@@ -6,7 +6,7 @@ This directory contains the runnable launchers for the control plane, data plane
 
 - Docker Desktop (or a Docker daemon) running.
 - JDK 17+ and Gradle wrapper (already included in the repository).
-- Ports 8280-8285, 8081, 8290 and 8380-8386 available on your host.
+- Ports 9280-9285, 9181, 9290 and 9480-9486 available on your host.
 
 ## 1. Build the launcher runtimes (only when you changed code)
 
@@ -62,15 +62,15 @@ docker exec edc-vault sh -lc "\
 Health checks:
 
 ```powershell
-curl http://localhost:8280/api/check/health    # controlplane
-curl http://localhost:8081/api/check/health    # dataplane
-curl http://localhost:8380/api/check/health    # identity hub
+curl http://localhost:9280/api/check/health    # controlplane
+curl http://localhost:9181/api/check/health    # dataplane
+curl http://localhost:9480/api/check/health    # identity hub
 ```
 
 Management API (mirrors the MVD shape). Always include the token `password`:
 
 ```powershell
-curl -X POST http://localhost:8281/api/management/v3/assets `
+curl -X POST http://localhost:9281/api/management/v3/assets `
   -H "Content-Type: application/json" `
   -H "Authorization: Bearer password" `
   -d '{
