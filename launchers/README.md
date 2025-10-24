@@ -1,6 +1,21 @@
 # Launchers
 
-Este directorio contiene los “launchers” ejecutables del conector: Control Plane, Data Plane e Identity Hub. A continuación tienes una guía completa en español para construir los artefactos, arrancar la pila Docker, sembrar (seed) secretos/identidad y verificar que todo funciona. Al final se incluye una descripción de los componentes y de la arquitectura.
+Este directorio contiene los "launchers" ejecutables del conector: Control Plane, Data Plane e Identity Hub. Esta guía en español está pensada para cualquier persona que se descargue el repo, sin necesidad de conocer EDC a fondo. Sigue los pasos en orden y usa la sección de solución de problemas si algo no arranca.
+
+## Resumen rápido (si tienes prisa)
+
+1) Construir JARs: `./gradlew -Ppersistence=true :launchers:controlplane:shadowJar :launchers:dataplane:shadowJar :launchers:identity-hub:shadowJar`
+2) Levantar stack: `cd launchers && docker compose up -d --build`
+3) Seed inicial: `bash seed-local.sh`
+4) Comprobar health: `curl http://localhost:9280/api/check/health`
+5) Probar gestión: `curl -H "Authorization: Bearer password" http://localhost:9281/api/management/v3/assets`
+6) Pedir catálogo (con o sin proxy X-Api-Key, según el provider)
+7) Si aparece `401 Unauthorized`, sustituye VCs en `deployment/assets/credentials/` por las emitidas por el issuer del dataspace y repite el seed.
+
+## 0) Clonar el repositorio
+
+- Descarga o clona el repo en tu equipo (Windows, macOS o Linux). En Windows con WSL o PowerShell funciona bien.
+- A partir de aquí, todas las rutas se refieren a `EDC-Connector/launchers` salvo que se indique lo contrario.
 
 ## Requisitos
 
@@ -15,7 +30,10 @@ Este directorio contiene los “launchers” ejecutables del conector: Control P
 Cada Dockerfile copia un JAR sombreado desde `launchers/<runtime>/build/libs`. Genera/actualiza estos artefactos cuando cambies código o dependencias:
 
 ```bash
-./gradlew -Ppersistence=true :launchers:controlplane:shadowJar :launchers:dataplane:shadowJar :launchers:identity-hub:shadowJar
+./gradlew -Ppersistence=true \
+  :launchers:controlplane:shadowJar \
+  :launchers:dataplane:shadowJar \
+  :launchers:identity-hub:shadowJar
 ```
 
 
@@ -34,6 +52,23 @@ La pila de Compose monta la configuración y el material de credenciales desde e
 - `deployment/assets/participants/participants.local.json` - (opcional) mapa DID -> endpoint a resolver por el Control Plane.
 
 Todas las piezas deben ser consistentes: el DID configurado en controlplane, dataplane e identity-hub debe corresponder con las claves/VCs montadas. Si no, tendrás reinicios/errores de validación.
+
+Notas prácticas:
+- Windows/macOS: `host.docker.internal` funciona de serie. Linux: añade en `docker-compose.yml` `extra_hosts: ["host.docker.internal:host-gateway"]` en los servicios que necesiten hablar con el host.
+- Este repo NO incluye un servicio de emisión (issuer). Las VCs de `deployment/assets/credentials` son de ejemplo; para escenarios reales pide credenciales al issuer del dataspace y colócalas ahí.
+
+### ¿Dónde encuentro endpoints y claves?
+
+- Gestión del Control Plane: `launchers/controlplane/configuration.properties`
+  - URL: `http://localhost:9281/api/management` (según `web.http.management.port/path`)
+  - Token: `password` (según `web.http.management.auth.key`)
+- DSP del Control Plane (entrante/saliente): `http://localhost:9282/api/dsp`
+  - Propiedad de callback: `edc.dsp.callback.address`
+- STS/Identity Hub: `launchers/controlplane/configuration.properties`
+  - `edc.iam.sts.oauth.token.url` → normalmente `http://identity-hub:8286/api/sts/token`
+  - `edc.iam.sts.oauth.client.id` → tu DID
+  - `edc.iam.sts.oauth.client.secret.alias` → alias en Vault (ver seed)
+- Identity Hub (APIs): base `http://localhost:9480/api`, identity `:9482`, credentials `:9481`, did `:9483`, version `:9485`, sts `:9486`
 
 ## 3) Arrancar con Docker Compose (recomendado)
 
@@ -92,7 +127,9 @@ bash seed-local.sh
 El script:
 
 - guarda la API key de superusuario (`SUPERUSER_API_KEY`) y el secreto de STS (`STS_SECRET_VALUE`) en el contenedor `edc-vault` bajo claves KV con el campo `content`;
-- registra el participante en el Hub, lo activa y publica su DID.
+- registra el participante en el Hub (si ya existe verás “already exists”);
+- intenta activarlo/publicar el DID (si el Hub no soporta esos endpoints verás 405/500 y continúa);
+- crea/actualiza el `clientSecret` en Vault con el alias `did:web:host.docker.internal%3A9483-sts-client-secret`.
 
 Variables que puedes sobreescribir antes de ejecutar:
 
@@ -130,7 +167,52 @@ curl -X POST http://localhost:9281/api/management/v3/assets \
 
 Si devuelve `201`, el controlplane está listo para llamadas de gestión.
 
-## 7) Parada y limpieza
+## 7) Pedir catálogo al proveedor (ejemplo)
+
+Lanza un `CatalogRequest` al DSP del proveedor. Ejemplo con curl (token de gestión `password`):
+
+```bash
+curl -sS -X POST http://localhost:9281/api/management/v3/catalog/request \
+  -H 'Authorization: Bearer password' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
+        "@type": "CatalogRequest",
+        "counterPartyAddress": "http://host.docker.internal:8282/api/dsp",
+        "counterPartyId": "did:web:provider-identityhub%3A7093",
+        "protocol": "dataspace-protocol-http",
+        "querySpec": { "offset": 0, "limit": 50 }
+      }'
+```
+
+Posibles respuestas:
+- `502/JWSSigner ... not found` → falta la clave/secret en Vault. Ejecuta `./seed-local.sh` y verifica que existe:
+  `docker exec edc-vault sh -lc 'VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root vault kv get secret/did:web:host.docker.internal%3A9483-sts-client-secret'`.
+- `{"message":"x-api-key not found"}` → el provider exige la cabecera `X-Api-Key`. Añádela con un proxy (ver “Cabecera X-Api-Key” abajo).
+- `dspace:code=401/Unauthorized` → el provider exige VCs válidas (membership/dataprocessor) emitidas por su issuer para tu DID. Sustituye las VCs de `deployment/assets/credentials` por las oficiales y ejecuta `./seed-local.sh`.
+
+### Cabecera X-Api-Key (rápido con Nginx)
+
+Si el provider requiere `X-Api-Key`, arranca un proxy que la inyecte:
+
+```nginx
+server {
+  listen 9822;
+  location /api/dsp {
+    proxy_set_header X-Api-Key password;
+    proxy_pass http://provider-controlplane:8082;
+  }
+}
+```
+
+```bash
+docker run -d --name edc-dsp-proxy -p 9822:80 \
+  -v $(pwd)/default.conf:/etc/nginx/conf.d/default.conf:ro nginx:1.27
+```
+
+Usa `counterPartyAddress": "http://host.docker.internal:9822/api/dsp"` en el body del request.
+
+## 8) Parada y limpieza
 
 ```bash
 docker compose down          # para contenedores y conserva volúmenes
@@ -177,39 +259,27 @@ Usa `docker compose logs -f <servicio>` para diagnosticar arranques. Si un conte
 
 ---
 
+
+
+## Solución de problemas frecuentes
+
+- “Using the InMemoryVault ...” y errores con STS
+  - Asegúrate de construir con `-Ppersistence=true` (paso 1).
+  - Ejecuta `./seed-local.sh` tras cada `up --build` (Vault en dev se vacía si recreas contenedores).
+  - Comprueba que `controlplane/configuration.properties` incluye:
+    - `edc.iam.sts.privatekey.alias=key-1`
+    - `edc.iam.sts.publickey.id=did:web:host.docker.internal%3A9483#key-1`
+- “JWSSigner cannot be generated ... private key ... not found”
+  - Carga la clave privada en Vault con alias `key-1` (el seed ya lo hace) y repite el seed.
+- `x-api-key not found`
+  - El provider exige la cabecera en su DSP. Usa el proxy Nginx o integra la cabecera en tu entorno.
+- `401 Unauthorized (dspace:CatalogError)`
+  - El provider exige VCs válidas para tu DID. Sustituye las VCs de ejemplo por las emitidas por su issuer y repite `./seed-local.sh`.
+
+---
+
 - [DPF Selector](dpf-selector/)
 - [Generic](generic/)
 - [STS server](sts-server/)
 
----
 
-## Interoperar con i2cat (edc-scenario-main)
-
-Objetivo: desde este EDC-Connector (como consumer) solicitar el catálogo al provider del escenario i2cat sin modificar su compose.
-
-1) Arranca este stack y ejecuta el seed local
-- Sigue los pasos 1–6 de este README.
-
-2) (Opcional) Registrar este conector en el Identity Hub del provider i2cat
-- No es estrictamente necesario para pedir catálogo si el provider puede resolver tu DID `did:web:host.docker.internal%3A9483` y alcanzar tus endpoints (DSP y CredentialService) desde su red.
-- Úsalo sólo si recibes errores del tipo "participante desconocido" o si el provider no consigue localizar tu CredentialService durante la negociación.
-- Ejecuta desde `launchers/`:
-  - `bash seed-i2cat.sh`
-- Variables opcionales:
-  - `I2CAT_PROVIDER_IDENTITY_HOST` (por defecto `localhost`)
-  - `I2CAT_PROVIDER_IDENTITY_PORT` (por defecto `7091`)
-  - `SUPERUSER_API_KEY` (por defecto la de demo)
-  - `PARTICIPANT_DID` (por defecto `did:web:host.docker.internal%3A9483`)
-- El script registra tu `ProtocolEndpoint` (`http://host.docker.internal:9282/api/dsp`) y tu `CredentialService` (`http://host.docker.internal:9481/...`).
-
-3) Solicita el catálogo del provider i2cat
-- Ejecuta:
-  - `bash catalog-request.sh`
-- Variables opcionales:
-  - `PROVIDER_DSP_URL` (por defecto `http://localhost:8282/api/dsp`)
-  - `EDC_MGMT_URL` (por defecto `http://localhost:9281`) y `EDC_MGMT_TOKEN` (por defecto `password`).
-- Si el provider tiene políticas que requieren VCs específicas, reemplaza tus credenciales en `deployment/assets/credentials/` por VCs emitidas por su issuer.
-
-Notas
-- En Windows/Mac, `host.docker.internal` es resolvible desde los contenedores de i2cat, por lo que el provider alcanzará tus endpoints sin tocar su compose.
-- Si ves el dataplane `unhealthy`, ya se ha corregido el healthcheck para apuntar a `/api/check/health` en la imagen.
