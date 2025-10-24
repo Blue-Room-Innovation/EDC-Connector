@@ -225,6 +225,8 @@ Usa `docker compose logs -f <servicio>` para diagnosticar arranques. Si un conte
 
 ## Componentes y Arquitectura
 
+![alt text](image.png)
+
 - Control Plane
   - Orquesta negociación de contratos (DSP), catálogo, políticas y transferencias.
   - Expone APIs: base/health (`9280`), gestión (`9281`), protocolo DSP (`9282`), control/selector (`9283`), catálogo (`9284`), versión (`9285`). Mapeo host:contenedor según `docker-compose.yml`.
