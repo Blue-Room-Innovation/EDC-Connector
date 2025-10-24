@@ -81,8 +81,7 @@ PARTICIPANT_PAYLOAD=$(cat <<JSON
     "keyId": "${PARTICIPANT_DID}#key-1",
     "privateKeyAlias": "key-1",
     "keyGeneratorParams": {
-      "algorithm": "EdDSA",
-      "curve": "Ed25519"
+      "algorithm": "EC"
     }
   }
 }
