@@ -14,7 +14,7 @@ log() {
 }
 
 IDENTITY_API="http://localhost:9482/api/identity/v1alpha"
-CREDENTIAL_SERVICE_BASE="${CREDENTIAL_SERVICE_BASE:-http://host.docker.internal:9481}"
+CREDENTIAL_SERVICE_BASE="${CREDENTIAL_SERVICE_BASE:-http://host.docker.internal:9482}"
 CONTROLPLANE_BASE="${CONTROLPLANE_BASE:-http://host.docker.internal:9282}"
 PARTICIPANT_DID="${PARTICIPANT_DID:-did:web:host.docker.internal%3A9483}"
 SUPERUSER_API_KEY="${SUPERUSER_API_KEY:-c3VwZXItdXNlcg==.c3VwZXItc2VjcmV0LWtleQo=}"
