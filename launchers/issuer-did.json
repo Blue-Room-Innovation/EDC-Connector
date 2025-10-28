@@ -1,0 +1,23 @@
+{
+  "@context": ["https://www.w3.org/ns/did/v1"],
+  "id": "did:web:host.docker.internal%3A10016:issuer",
+  "verificationMethod": [
+    {
+      "id": "did:web:host.docker.internal%3A10016:issuer#key-1",
+      "type": "JsonWebKey2020",
+      "controller": "did:web:host.docker.internal%3A10016:issuer",
+      "publicKeyJwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "kLNQr1QNLXqyP7kly68hqk4amNz9Lz8sy1m3n6767M0"
+      }
+    }
+  ],
+  "service": [
+    {
+      "id": "issuer-service-1",
+      "type": "IssuerService",
+      "serviceEndpoint": "http://host.docker.internal:10012/api/issuance/v1alpha/participants/ZGlkOndlYjpkYXRhc3BhY2UtaXNzdWVyLXNlcnZpY2UlM0ExMDAxNjppc3N1ZXI="
+    }
+  ]
+}
