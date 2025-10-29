@@ -14,9 +14,9 @@ log() {
 }
 
 IDENTITY_API="http://localhost:9482/api/identity/v1alpha"
-CREDENTIAL_SERVICE_BASE="${CREDENTIAL_SERVICE_BASE:-http://host.docker.internal:9482}"
-CONTROLPLANE_BASE="${CONTROLPLANE_BASE:-http://host.docker.internal:9282}"
-PARTICIPANT_DID="${PARTICIPANT_DID:-did:web:host.docker.internal%3A9483}"
+CREDENTIAL_SERVICE_BASE="${CREDENTIAL_SERVICE_BASE:-http://edc-identity-hub:8281}"
+CONTROLPLANE_BASE="${CONTROLPLANE_BASE:-http://edc-controlplane:8282}"
+PARTICIPANT_DID="${PARTICIPANT_DID:-did:web:edc-identity-hub%3A8283}"
 SUPERUSER_API_KEY="${SUPERUSER_API_KEY:-c3VwZXItdXNlcg==.c3VwZXItc2VjcmV0LWtleQo=}"
 STS_SECRET_VALUE="${STS_SECRET_VALUE:-}"
 
@@ -31,7 +31,6 @@ docker exec edc-vault sh -lc "\
   vault kv put secret/key-1 content='${PRIVATE_KEY_CONTENT}' >/dev/null \
 " >/dev/null
 log "Stored private key alias key-1 in edc-vault"
-
 log "Stored super-user API key in edc-vault"
 
 PARTICIPANT_DID_B64=$(printf '%s' "${PARTICIPANT_DID}" | base64 | tr -d '\n')
@@ -81,7 +80,7 @@ PARTICIPANT_PAYLOAD=$(cat <<JSON
     "keyId": "${PARTICIPANT_DID}#key-1",
     "privateKeyAlias": "key-1",
     "keyGeneratorParams": {
-      "algorithm": "EC"
+      "algorithm": "EdDSA"
     }
   }
 }
@@ -137,7 +136,7 @@ case "${HTTP_CODE}" in
     "keyId": "${PARTICIPANT_DID}#key-1",
     "privateKeyAlias": "key-1",
     "keyGeneratorParams": {
-      "algorithm": "EC"
+      "algorithm": "EdDSA"
     }
   }
 }
@@ -236,3 +235,4 @@ else
 fi
 
 log "Seed completed. Your connector is registered and ready to interact with the dataspace."
+

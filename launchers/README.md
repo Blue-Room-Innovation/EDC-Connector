@@ -54,7 +54,7 @@ La pila de Compose monta la configuración y el material de credenciales desde e
 Todas las piezas deben ser consistentes: el DID configurado en controlplane, dataplane e identity-hub debe corresponder con las claves/VCs montadas. Si no, tendrás reinicios/errores de validación.
 
 Notas prácticas:
-- Windows/macOS: `host.docker.internal` funciona de serie. Linux: añade en `docker-compose.yml` `extra_hosts: ["host.docker.internal:host-gateway"]` en los servicios que necesiten hablar con el host.
+- Los servicios se resuelven mediante DNS de Docker (edc-controlplane, edc-identity-hub, edc-dataplane); con�ctalos a la misma red que el dataspace.
 - Este repo NO incluye un servicio de emisión (issuer). Las VCs de `deployment/assets/credentials` son de ejemplo; para escenarios reales pide credenciales al issuer del dataspace y colócalas ahí.
 
 ### ¿Dónde encuentro endpoints y claves?
@@ -129,12 +129,12 @@ El script:
 - guarda la API key de superusuario (`SUPERUSER_API_KEY`) y el secreto de STS (`STS_SECRET_VALUE`) en el contenedor `edc-vault` bajo claves KV con el campo `content`;
 - registra el participante en el Hub (si ya existe verás “already exists”);
 - intenta activarlo/publicar el DID (si el Hub no soporta esos endpoints verás 405/500 y continúa);
-- crea/actualiza el `clientSecret` en Vault con el alias `did:web:host.docker.internal%3A9483-sts-client-secret`.
+- crea/actualiza el `clientSecret` en Vault con el alias `did:web:edc-identity-hub%3A8283-sts-client-secret`.
 
 Variables que puedes sobreescribir antes de ejecutar:
 
 ```bash
-export PARTICIPANT_DID="did:web:host.docker.internal%3A9483"
+export PARTICIPANT_DID="did:web:edc-identity-hub%3A8283"
 export SUPERUSER_API_KEY="base64.superuser.key"
 export STS_SECRET_VALUE="change-me"
 bash seed-local.sh
@@ -178,7 +178,7 @@ curl -sS -X POST http://localhost:9281/api/management/v3/catalog/request \
   -d '{
         "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
         "@type": "CatalogRequest",
-        "counterPartyAddress": "http://host.docker.internal:8282/api/dsp",
+        "counterPartyAddress": "http://edc-controlplane:8282/api/dsp",
         "counterPartyId": "did:web:provider-identityhub%3A7093",
         "protocol": "dataspace-protocol-http",
         "querySpec": { "offset": 0, "limit": 50 }
@@ -187,7 +187,7 @@ curl -sS -X POST http://localhost:9281/api/management/v3/catalog/request \
 
 Posibles respuestas:
 - `502/JWSSigner ... not found` → falta la clave/secret en Vault. Ejecuta `./seed-local.sh` y verifica que existe:
-  `docker exec edc-vault sh -lc 'VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root vault kv get secret/did:web:host.docker.internal%3A9483-sts-client-secret'`.
+  `docker exec edc-vault sh -lc 'VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root vault kv get secret/did:web:edc-identity-hub%3A8283-sts-client-secret'`.
 - `{"message":"x-api-key not found"}` → el provider exige la cabecera `X-Api-Key`. Añádela con un proxy (ver “Cabecera X-Api-Key” abajo).
 - `dspace:code=401/Unauthorized` → el provider exige VCs válidas (membership/dataprocessor) emitidas por su issuer para tu DID. Sustituye las VCs de `deployment/assets/credentials` por las oficiales y ejecuta `./seed-local.sh`.
 
@@ -210,7 +210,7 @@ docker run -d --name edc-dsp-proxy -p 9822:80 \
   -v $(pwd)/default.conf:/etc/nginx/conf.d/default.conf:ro nginx:1.27
 ```
 
-Usa `counterPartyAddress": "http://host.docker.internal:9822/api/dsp"` en el body del request.
+Usa `counterPartyAddress": "http://edc-controlplane:8282/api/dsp"` en el body del request.
 
 ## 8) Parada y limpieza
 
@@ -270,7 +270,7 @@ Usa `docker compose logs -f <servicio>` para diagnosticar arranques. Si un conte
   - Ejecuta `./seed-local.sh` tras cada `up --build` (Vault en dev se vacía si recreas contenedores).
   - Comprueba que `controlplane/configuration.properties` incluye:
     - `edc.iam.sts.privatekey.alias=key-1`
-    - `edc.iam.sts.publickey.id=did:web:host.docker.internal%3A9483#key-1`
+    - `edc.iam.sts.publickey.id=did:web:edc-identity-hub%3A8283#key-1`
 - “JWSSigner cannot be generated ... private key ... not found”
   - Carga la clave privada en Vault con alias `key-1` (el seed ya lo hace) y repite el seed.
 - `x-api-key not found`

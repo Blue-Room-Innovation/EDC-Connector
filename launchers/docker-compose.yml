@@ -24,6 +24,12 @@ services:
       - ./controlplane/configuration.properties:/app/configuration.properties:ro
       - ./controlplane/logging.properties:/app/logging.properties:ro
       - ../deployment/assets/participants/participants.local.json:/etc/participants/participants.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8280/api/check/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 10
     depends_on:
       # Start once backing services (database + vault) are ready.
       postgres:
@@ -57,6 +63,12 @@ services:
       # Provide runtime configuration/logging from the launcher directory.
       - ./dataplane/configuration.properties:/app/configuration.properties:ro
       - ./dataplane/logging.properties:/app/logging.properties:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/check/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 10
     networks:
       - shared-net
 
@@ -137,3 +149,6 @@ volumes:
 networks:
   shared-net:
     external: true
+
+
+
