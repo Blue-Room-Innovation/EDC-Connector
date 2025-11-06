@@ -37,7 +37,7 @@ services:
       vault:
         condition: service_started
     networks:
-      - shared-net
+      - kind
 
   dataplane:
     # Moves data between providers/consumers. Registers with the control plane via selector API.
@@ -70,7 +70,7 @@ services:
       start_period: 20s
       retries: 10
     networks:
-      - shared-net
+      - kind
 
   identity-hub:
     # Issues/verifies credentials and exposes STS/DID services required by the control plane.
@@ -107,7 +107,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - shared-net
+      - kind
 
   vault:
     # Dev-mode HashiCorp Vault storing secrets such as STS client credentials.
@@ -120,7 +120,7 @@ services:
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
     command: "server -dev -dev-root-token-id=root"
     networks:
-      - shared-net
+      - kind
 
   postgres:
     # Shared PostgreSQL database backing the control plane, dataplane and identity hub.
@@ -140,14 +140,14 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
-      - shared-net
+      - kind
 
 volumes:
   # Persist database data between container restarts.
   pgdata:
 
 networks:
-  shared-net:
+  kind:
     external: true
 
 
