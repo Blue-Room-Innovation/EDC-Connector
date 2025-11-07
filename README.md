@@ -50,9 +50,29 @@ connector to become operational the `runtime` needs to perform several important
 example take a look at
 [this runtime](https://github.com/eclipse-edc/Samples/blob/main/other/custom-runtime/src/main/java/org/eclipse/edc/sample/runtime/CustomRuntime.java)
 
+Practical local usage, build steps y flujo de arranque del stack (controlplane, dataplane, identity-hub, Vault y Postgres) están documentados en:
+
+`launchers/README.md`
+
+Lee ese archivo si quieres:
+* Construir los JAR sombreados y levantar el stack del conector con Docker Compose.
+* Sembrar secretos y credenciales (`seed-local.sh`).
+* Registrar assets HTTP con bearer token (`create-circularpass.assets.sh`).
+* Entender puertos/healthchecks y solucionar problemas comunes.
+
 ### `data-protocols`
 
 Contains implementations for communication protocols a connector might use, such as DSP.
+
+## Additional project documentation
+
+Dentro de `docs/` encontrarás guías específicas y material de soporte:
+
+* `docs/http-assets-bearer-guide.md` – Cómo publicar y consumir assets `HttpData` con bearer tokens y secretos en Vault.
+* `docs/developer/` – Decision records y documentación técnica orientada a desarrolladores.
+* (Más guías pueden añadirse a medida que evolucione el conector.)
+
+Si estás empezando con el uso local del conector: 1) lee `launchers/README.md`, 2) consulta la guía de bearer tokens si expondrás APIs protegidas, y 3) revisa las decisiones en `docs/developer` para entender extensiones y límites del runtime.
 
 ## Contributing
 

@@ -1,8 +1,23 @@
 # Launchers
 
-Este directorio contiene los "launchers" ejecutables del conector: Control Plane, Data Plane e Identity Hub. Esta guía en español está pensada para cualquier persona que se descargue el repo, sin necesidad de conocer EDC a fondo. Sigue los pasos en orden y usa la sección de solución de problemas si algo no arranca.
+Este directorio contiene los lanzadores ("launchers") ejecutables del conector: **Control Plane**, **Data Plane** e **Identity Hub**, junto a servicios de soporte (**PostgreSQL** y **HashiCorp Vault**). La guía está pensada para arrancar el stack local sin conocer EDC a fondo y para entender los scripts clave de inicialización y registro de assets.
 
-## Resumen rápido (si tienes prisa)
+Índice rápido:
+1. Resumen exprés
+2. Requisitos
+3. Construcción de JARs sombreado (shadow)
+4. Configuración y material de identidad
+5. Arranque con Docker Compose
+6. Scripts disponibles (seed-local, store-vault-secret, create-circularpass.assets)
+7. Verificación y primeras llamadas
+8. Catálogo remoto y X-Api-Key opcional
+9. Parada y limpieza
+10. Arquitectura y puertos
+11. Solución de problemas frecuentes
+
+---
+
+## 1. Resumen rápido (si tienes prisa)
 
 1) Construir JARs: `./gradlew -Ppersistence=true :launchers:controlplane:shadowJar :launchers:dataplane:shadowJar :launchers:identity-hub:shadowJar`
 2) Levantar stack: `cd launchers && docker compose up -d --build`
@@ -12,20 +27,16 @@ Este directorio contiene los "launchers" ejecutables del conector: Control Plane
 6) Pedir catálogo (con o sin proxy X-Api-Key, según el provider)
 7) Si aparece `401 Unauthorized`, sustituye VCs en `deployment/assets/credentials/` por las emitidas por el issuer del dataspace y repite el seed.
 
-## 0) Clonar el repositorio
+## 2. Requisitos
+
+Necesitas antes de nada: Docker (Desktop o Engine) con Compose v2, JDK 17+, Bash y `curl`, puertos libres (`9280-9285`, `9181`, `9290`, `9480-9486`, `9200`, `9432`) y material DID/VCs en `deployment/assets/`.
+
+## 3. Clonar el repositorio
 
 - Descarga o clona el repo en tu equipo (Windows, macOS o Linux). En Windows con WSL o PowerShell funciona bien.
 - A partir de aquí, todas las rutas se refieren a `EDC-Connector/launchers` salvo que se indique lo contrario.
 
-## Requisitos
-
-- Docker Desktop (o Docker Engine) con Compose v2.
-- JDK 17 o superior para ejecutar el wrapper de Gradle (`./gradlew` / `.\gradlew`).
-- Bash (Git Bash/WSL) y `curl` en el PATH para ejecutar `seed-local.sh`.
-- Puertos libres en el host: `9280-9285`, `9181`, `9290`, `9480-9486`, `9200`, `9432`.
-- Material de identidad: claves DID y credenciales verificables en `deployment/assets/` (los ficheros que vienen son de ejemplo; sustituye por los tuyos si procede).
-
-## 1) Construir los JAR “sombreados” (shadow)
+## 4. Construir los JAR “sombreados” (shadow)
 
 Cada Dockerfile copia un JAR sombreado desde `launchers/<runtime>/build/libs`. Genera/actualiza estos artefactos cuando cambies código o dependencias:
 
@@ -41,7 +52,7 @@ La propiedad `-Ppersistence=true` incluye las extensiones de PostgreSQL y HashiC
 
 > Consejo: Gradle hará “up-to-date” si nada cambió, así que puedes ejecutar este paso siempre sin pagar todo el coste del build.
 
-## 2) Revisar identidades, credenciales y participantes
+## 5. Revisar identidades, credenciales y participantes
 
 La pila de Compose monta la configuración y el material de credenciales desde el repo. Revisa y alinea:
 
@@ -70,7 +81,7 @@ Notas prácticas:
   - `edc.iam.sts.oauth.client.secret.alias` → alias en Vault (ver seed)
 - Identity Hub (APIs): base `http://localhost:9480/api`, identity `:9482`, credentials `:9481`, did `:9483`, version `:9485`, sts `:9486`
 
-## 3) Arrancar con Docker Compose (recomendado)
+## 6. Arranque con Docker Compose (recomendado)
 
 Desde la carpeta `launchers/` construye las imágenes y arranca servicios:
 
@@ -84,7 +95,7 @@ Si falla `docker compose build` por falta de JARs, repite el paso 1. La pila lev
 
 > Si solo cambiaste ficheros de configuración, puedes usar `docker compose up -d --build` para reconstruir sin pasar por Gradle manualmente.
 
-## 4) (Opcional) Construir imágenes con Gradle (`dockerize`)
+## 7. (Opcional) Construir imágenes con Gradle (`dockerize`)
 
 Este repo define una tarea `dockerize` por launcher (se crea automáticamente si hay `shadowJar` y `src/main/docker/Dockerfile`, ver `build.gradle.kts: subprojects { afterEvaluate { ... dockerize ... } }`). Sirve para preconstruir imágenes desde Gradle y etiquetarlas con `latest` y la versión del proyecto.
 
@@ -115,7 +126,71 @@ docker tag identity-hub:latest edc-identity-hub:latest
 
 - O simplemente usa `docker compose up -d --build` y deja que Compose construya/etiquete con los nombres esperados. En la práctica, usar Compose (paso 3) es suficiente y no necesitas `dockerize` salvo que quieras publicar/gestionar imágenes con Gradle.
 
-## 5) Sembrar Vault e Identity Hub (primer arranque o tras limpiar volúmenes)
+## 8. Scripts disponibles y flujo inicial
+
+### 8.1 `seed-local.sh`
+Inicializa el entorno tras el primer arranque o tras limpiar volúmenes:
+* Guarda API key de superusuario y clave privada DID en Vault (alias `key-1`).
+* Registra el participante en el Identity Hub.
+* Publica/activa DID (si los endpoints están soportados).
+* Persiste el `clientSecret` del STS como `<DID>-sts-client-secret`.
+
+Uso mínimo:
+```bash
+cd launchers
+bash seed-local.sh
+```
+Sobrescribir variables:
+```bash
+export PARTICIPANT_DID="did:web:edc-identity-hub%3A8283"
+export SUPERUSER_API_KEY="base64.superuser.key"
+export STS_SECRET_VALUE="change-me"
+bash seed-local.sh
+```
+
+### 8.2 `store-vault-secret.sh`
+Helper para escribir/rotar un secreto bajo `secret/<nombre>` con campo `content` (KV v2). Útil para bearer tokens o API Keys referenciados por assets `HttpData` vía `secretName`.
+
+```bash
+VAULT_ADDR=http://localhost:9200 \
+VAULT_TOKEN=root \
+SECRET_NAME=secure-api \
+SECRET_VALUE="Bearer eyJ..." \
+./store-vault-secret.sh
+```
+Verificación:
+```bash
+curl -s -H "X-Vault-Token: root" http://localhost:9200/v1/secret/data/secure-api | jq -r '.data.data.content'
+docker exec edc-vault sh -lc 'VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root vault kv get -format=json secret/secure-api' | jq -r '.data.data.content'
+```
+Rotación = reejecutar con nuevo `SECRET_VALUE`.
+
+### 8.3 `create-circularpass.assets.sh`
+Registra un asset `HttpData` + policy + contract definition para exponer una API protegida cuyo token vive en Vault (secretName). Variables principales:
+
+| Variable | Significado | Default |
+|----------|-------------|---------|
+| BASE_URL | URL base de la Management API (sin sufijo /api/management/v3) | http://localhost:9281 |
+| MGMT_TOKEN | Token Bearer configurado en `web.http.management.auth.key` | password |
+| ASSET_ID | ID lógico del asset | asset-secure-endpoint |
+| ASSET_BASE_URL | Backend protegido (base URL) | https://api.circularpass.io/api/secure/v1/instances |
+| SECRET_NAME | Nombre del secreto en Vault | secure-api |
+| POLICY_ID | ID de la policy | require-membership |
+| CONTRACT_DEF_ID | ID contract definition | secure-asset-membership-required-def |
+
+Ejemplo:
+```bash
+MGMT_TOKEN=password \
+ASSET_BASE_URL=https://api.circularpass.io/api/secure/v1/instances \
+SECRET_NAME=secure-api \
+./create-circularpass.assets.sh
+```
+Después puedes listar assets:
+```bash
+curl -H "Authorization: Bearer password" http://localhost:9281/api/management/v3/assets
+```
+
+## 9. Verificación rápida
 
 Cuando los contenedores estén en marcha, ejecuta el script de seed para almacenar secretos en Vault y registrar el participante en el Identity Hub:
 
@@ -142,7 +217,7 @@ bash seed-local.sh
 
 Repite el seed si rotas credenciales o tras `docker compose down -v`.
 
-## 6) Verificación rápida
+### Health y gestión
 
 Comprueba salud de servicios:
 
@@ -167,7 +242,7 @@ curl -X POST http://localhost:9281/api/management/v3/assets \
 
 Si devuelve `201`, el controlplane está listo para llamadas de gestión.
 
-## 7) Pedir catálogo al proveedor (ejemplo)
+## 10. Pedir catálogo al proveedor (ejemplo)
 
 Lanza un `CatalogRequest` al DSP del proveedor. Ejemplo con curl (token de gestión `password`):
 
@@ -212,7 +287,7 @@ docker run -d --name edc-dsp-proxy -p 9822:80 \
 
 Usa `counterPartyAddress": "http://edc-controlplane:8282/api/dsp"` en el body del request.
 
-## 8) Parada y limpieza
+## 11. Parada y limpieza
 
 ```bash
 docker compose down          # para contenedores y conserva volúmenes
@@ -223,7 +298,7 @@ Usa `docker compose logs -f <servicio>` para diagnosticar arranques. Si un conte
 
 ---
 
-## Componentes y Arquitectura
+## 12. Componentes y Arquitectura
 
 ![alt text](image.png)
 
@@ -245,7 +320,7 @@ Usa `docker compose logs -f <servicio>` para diagnosticar arranques. Si un conte
   - Vault (modo dev) almacena secretos; el script de seed escribe bajo `secret/<clave>` con valor en el campo `content`.
   - PostgreSQL persiste estados del conector/hub/dataplane. Volumen `pgdata` mantiene datos entre arranques.
 
-### Flujo de arranque
+### Flujo de arranque (resumen)
 
 1) Arrancan `postgres` (hasta healthy) y `vault`.
 2) `controlplane` inicia y queda healthy (requiere DB/Vault).
@@ -255,7 +330,7 @@ Usa `docker compose logs -f <servicio>` para diagnosticar arranques. Si un conte
 ### Puertos relevantes (host -> contenedor)
 
 - Control Plane: `9280->8280`, `9281->8281`, `9282->8282`, `9283->8283`, `9284->8284`, `9285->8285`
-- Data Plane: `9181->8080`, `9290->8290`
+- Data Plane: `9181->8080` (API interna), `9290->8290` (API pública)
 - Identity Hub: `9480->8080`, `9481->8281`, `9482->8282`, `9483->8283`, `9485->8285`, `9486->8286`
 - Vault: `9200->8200` | PostgreSQL: `9432->5432`
 
@@ -263,7 +338,17 @@ Usa `docker compose logs -f <servicio>` para diagnosticar arranques. Si un conte
 
 
 
-## Solución de problemas frecuentes
+## 13. Tabla de puertos y contextos
+
+| Servicio | Host Portes | Contenedor | Contextos HTTP internos |
+|----------|-------------|-----------|-------------------------|
+| Control Plane | 9280-9285 | 8280-8285 | /api (health), /api/management, /api/dsp, /api/control, /api/catalog, /api/version |
+| Data Plane | 9181, 9290 | 8080, 8290 | /api (health), /api/public, /api/control (interno 9191) |
+| Identity Hub | 9480-9486 | 8080, 8281-8286 | /api base + identity/credentials/did/version/sts |
+| Vault | 9200 | 8200 | /v1/secret/... |
+| PostgreSQL | 9432 | 5432 | JDBC edc |
+
+## 14. Solución de problemas frecuentes
 
 - “Using the InMemoryVault ...” y errores con STS
   - Asegúrate de construir con `-Ppersistence=true` (paso 1).
@@ -278,10 +363,22 @@ Usa `docker compose logs -f <servicio>` para diagnosticar arranques. Si un conte
 - `401 Unauthorized (dspace:CatalogError)`
   - El provider exige VCs válidas para tu DID. Sustituye las VCs de ejemplo por las emitidas por su issuer y repite `./seed-local.sh`.
 
+## 15. Referencias internas
+
+Directorio de ejemplos y variantes:
+* `dpf-selector/` – variantes de selector/registro del dataplane.
+* `generic/` – runtime genérico de demostración.
+* `sts-server/` – componentes relacionados con STS.
+
+Guías adicionales en el root del repositorio:
+* `docs/http-assets-bearer-guide.md` – Detalle de assets HttpData con bearer y `secretName`.
+* `docs/developer/*` – Decision records y notas técnicas.
+
 ---
 
-- [DPF Selector](dpf-selector/)
-- [Generic](generic/)
-- [STS server](sts-server/)
+¿Mejoras futuras sugeridas?
+* Wrapper para comprobación de todos los health endpoints.
+* Script de rotación periódica de bearer tokens.
+* Ejemplos adicionales para `authCode` vs `secretName`.
 
 

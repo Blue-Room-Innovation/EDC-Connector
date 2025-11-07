@@ -1,21 +1,54 @@
-# Guia HTTP Assets con Bearer Token (Stack local EDC-Connector)
+# Guía: Assets HTTP con Bearer Token (stack local)
 
-Esta guía explica cómo exponer un asset `HttpData` en el stack local de este
-repositorio (controlplane + dataplane + Vault en Docker Compose) cuando el
-backend requiere un Bearer Token. Cubre:
+Esta guía muestra cómo publicar y consumir un asset `HttpData` protegido con Bearer Token usando el stack local (controlplane + dataplane + Vault) de este repositorio.
 
-- Creacion y actualizacion del asset mediante la Management API.
-- Almacenamiento del token en HashiCorp Vault y su posterior rotacion.
-- Significado de las propiedades clave (`proxyMethod`, `proxyPath`, `secretName`, etc.).
-- Como consumir el recurso a partir de la EndpointDataReference (EDR).
+## Índice
+1. Objetivo y alcance
+2. Prerrequisitos
+3. Opciones de autenticación: `authCode` vs `secretName`
+4. Registro del asset (modo `authCode` - solo pruebas)
+5. Registro del asset con secreto en Vault (`secretName`)
+6. Propiedades del `dataAddress`
+7. Cómo funciona `proxyPath`
+8. Consumir el asset (EDR y llamadas al dataplane)
+9. Flujo resumido
+10. Buenas prácticas
+11. Scripts relacionados
+12. Troubleshooting rápido
+13. Referencias
 
 ---
 
-## 1. Asset con token incrustado (`authCode`)
+## 1. Objetivo y alcance
 
-Solo recomendado para pruebas rápidas con tokens de corta duración.
+El conector expone datos vía assets `HttpData` y el dataplane actúa como proxy. Para APIs que requieren Bearer Token (o API Key similar) puedes:
 
-1. Crea un fichero `asset-secure-endpoint.json`:
+| Método | Uso | Riesgos | Cuándo elegir |
+|--------|-----|---------|---------------|
+| `authCode` | Valor literal incrustado en el asset | Exposición del token si se exporta el asset, requiere PUT para rotar | Pruebas rápidas, tokens temporales |
+| `secretName` | Referencia a secreto almacenado en Vault | El valor no aparece en la definición pública del asset, rotación sin tocar asset | Entornos reales y rotaciones frecuentes |
+
+## 2. Prerrequisitos
+* Stack levantado: `docker compose up -d --build` en `launchers/`.
+* Vault dev accesible: `http://localhost:9200` (token: `root`).
+* Token de gestión del controlplane: `password` (si no lo cambiaste en `configuration.properties`).
+* `jq` y `curl` instalados para ejemplos.
+
+## 3. Opciones de autenticación
+Resumen rápido:
+
+```text
+authCode   -> dataAddress incluye el valor (p.ej. "Bearer eyJ...")
+secretName -> dataAddress referencia nombre del secreto; el dataplane lo lee de Vault y lo inyecta
+```
+
+Rotación:
+* `authCode`: actualizar vía `PUT /assets/{id}/dataaddress`.
+* `secretName`: ejecutar script/llamada Vault (no se modifica el asset).
+
+## 4. Registro con token incrustado (`authCode`) [solo pruebas]
+
+Crea `asset-secure-endpoint.json`:
 
    ```json
    {
@@ -39,7 +72,7 @@ Solo recomendado para pruebas rápidas con tokens de corta duración.
    }
    ```
 
-2. Registra el asset en el controlplane local (Management API):
+Registra el asset en la Management API:
 
    ```bash
       curl -X POST \
@@ -49,7 +82,7 @@ Solo recomendado para pruebas rápidas con tokens de corta duración.
          http://localhost:9281/api/management/v3/assets
    ```
 
-3. Para renovar el token repite el `PUT` solo con el `dataAddress`:
+Para renovar el token repite el `PUT` solo con el `dataAddress` (no hace falta reenviar `properties`):
 
    ```bash
       curl -X PUT \
@@ -70,9 +103,9 @@ Solo recomendado para pruebas rápidas con tokens de corta duración.
 
 ---
 
-## 2. Token en HashiCorp Vault (`secretName`)
+## 5. Registro con token en Vault (`secretName`) [recomendado]
 
-Uso recomendado para entornos reales o rotaciones frecuentes.
+Uso recomendado para entornos reales o tokens de larga duración.
 
 1. Ajusta el `dataAddress` para usar `secretName` (sin prefijos):
 
@@ -91,7 +124,7 @@ Uso recomendado para entornos reales o rotaciones frecuentes.
 
 2. Publica el asset como antes (`POST /management/v3/assets`).
 
-3. Guarda el token en el Vault dev del stack (contenedor `edc-vault`):
+Guarda el token en Vault (KV v2, campo `content`):
 
    ```bash
    export VAULT_ADDR=http://localhost:9200
@@ -123,20 +156,20 @@ Uso recomendado para entornos reales o rotaciones frecuentes.
    ./store-vault-secret.sh
    ```
 
-4. Para revisar o rotar:
+Revisar y rotar:
 
    ```bash
    vault kv get secret/secure-api          # ver valor actual
    vault kv put secret/secure-api content="Bearer <nuevo-token>"   # rotar
    ```
 
-   El dataplane siempre usará la versión más reciente sin necesidad de modificar el asset ni reiniciar servicios.
+   El dataplane siempre utiliza la versión más reciente. No requiere reinicios ni actualizar el asset.
 
 ---
 
-## 3. Propiedades del `dataAddress`
+## 6. Propiedades del `dataAddress`
 
-Todas las propiedades viven dentro del objeto `dataAddress`. La tabla siguiente resume las mas usadas y ejemplos de valores.
+Todas las propiedades viven dentro de `dataAddress`. Tabla de las más comunes:
 
 | Propiedad | Descripcion | Ejemplo util |
 |-----------|-------------|--------------|
@@ -163,7 +196,7 @@ Todas las propiedades viven dentro del objeto `dataAddress`. La tabla siguiente 
 - `authKey` sirve tanto para Bearer como para API keys; `secretName` funciona igual en ambos casos.
 - `proxyBody = "true"` implica que el consumidor envia el cuerpo exacto al dataplane (ideal para `POST`).
 
-### Combinaciones frecuentes
+### Combinaciones frecuentes (plantillas)
 
 1. **GET fijo**
    ```json
@@ -200,10 +233,10 @@ Todas las propiedades viven dentro del objeto `dataAddress`. La tabla siguiente 
    }
    ```
 
-El consumidor invoca el dataplane con el token de la EDR y el body requerido por la API origen. El dataplane añade el header usando el secreto de Vault.
+El consumidor invoca el dataplane con el token de la EDR y el body requerido por la API origen. El dataplane añade el header usando el secreto (Vault o `authCode`).
 
-> Consejo: si tu API no acepta sufijos dinamicos, desactiva `proxyPath` o fija `path` con la ruta exacta.
-### Cómo funciona realmente `proxyPath`
+> Consejo: si tu API no acepta sufijos dinámicos, desactiva `proxyPath` o fija `path` con la ruta exacta.
+## 7. Cómo funciona `proxyPath`
 
 - El dataplane publica todo bajo `.../api/public/**`. Con `proxyPath = "true"` copia literalmente el tramo que vaya **despues de `/api/public/`** y lo concatena al `baseUrl`.
 - Ejemplo dinamico: con `baseUrl = https://api.circularpass.io/api/secure/v1` y `proxyPath = "true"`, si el consumidor invoca  
@@ -213,7 +246,7 @@ El consumidor invoca el dataplane con el token de la EDR y el body requerido por
 
 ---
 
-## 4. Consumir el asset tras la transferencia
+## 8. Consumir el asset tras la transferencia
 
 1. El consumidor lanza la transferencia (`POST /management/v3/transferprocesses`).
 2. Una vez en estado `COMPLETED`, recupera la EDR:
@@ -227,7 +260,7 @@ El consumidor invoca el dataplane con el token de la EDR y el body requerido por
    - `endpoint`: URL base del dataplane del proveedor (`http://localhost:9290/api/public`).
    - `authorization`: token temporal que el consumidor debe usar.
 
-3. Para peticiones `PULL`, basta con invocar el endpoint público. Un formato habitual es `GET {endpoint}/data/{transferProcessId}`, pero en este stack puede omitirse el sufijo y llamar directamente a `{endpoint}`.
+Para peticiones PULL suele usarse `GET {endpoint}/data/{tpId}`, pero en este stack puede omitirse y llamar solo a `{endpoint}`.
 
    ```bash
    curl -X GET \
@@ -248,7 +281,7 @@ El consumidor invoca el dataplane con el token de la EDR y el body requerido por
 
 ---
 
-## 5. Flujo resumido
+## 9. Flujo resumido
 
 1. Publicas el asset `HttpData`.
 2. Creas la `Policy` y la `ContractDefinition` para exponerlo en el catalogo.
@@ -258,17 +291,36 @@ El consumidor invoca el dataplane con el token de la EDR y el body requerido por
 
 ---
 
-## 6. Buenas prácticas
+## 10. Buenas prácticas
 
-- Limita `authCode` a pruebas. En producción usa `secretName` y Vault.
-- Automatiza la rotación: scripts o jobs que actualicen `vault kv put secret/secure-api content="<nuevo>"`.
-- Ajusta `proxyPath` y `proxyMethod` según lo que acepte tu backend.
-- Observa los logs del dataplane (`docker compose logs -f dataplane`) para depurar.
-- Tras modificar el asset, inicia una nueva transferencia para validar los cambios.
+- Limita `authCode` a pruebas. En producción usa `secretName`.
+- Automatiza la rotación (`vault kv put secret/secure-api content="Bearer <nuevo>"`).
+- Ajusta `proxyPath`/`proxyMethod` según comportamiento del backend.
+- Logs útiles: `docker compose logs -f dataplane` y `docker compose logs -f controlplane`.
+- Tras cambiar el asset realiza una nueva transferencia (las anteriores no cambian su EDR).
+- Verifica el secreto rápido: `curl -H X-Vault-Token:root http://localhost:9200/v1/secret/data/secure-api | jq -r '.data.data.content'`.
 
 ---
 
-## 7. Referencias
+## 11. Scripts relacionados
+
+| Script | Propósito | Uso mínimo |
+|--------|-----------|------------|
+| `launchers/store-vault-secret.sh` | Guardar/rotar secreto en Vault bajo `content` | `SECRET_NAME=secure-api SECRET_VALUE="Bearer X" ./store-vault-secret.sh` |
+| `launchers/create-circularpass.assets.sh` | Crear asset + policy + contract definition para API con secreto | `./create-circularpass.assets.sh` |
+| `launchers/seed-local.sh` | Sembrar Vault (claves, superuser) y registrar participante en Hub | `./seed-local.sh` |
+
+## 12. Troubleshooting rápido
+
+| Síntoma | Causa probable | Solución |
+|---------|----------------|----------|
+| 401 al llamar dataplane | EDR expirada o token incorrecto | Obtener EDR nuevamente tras transferencia COMPLETED |
+| 404 en dataplane | `proxyPath=true` pero ruta vacía/no válida | Ajustar llamada o poner `proxyPath=false` y definir `path` |
+| Backend 401 pese a EDR válida | Secreto ausente o mal formateado (sin `Bearer `) | Revisar Vault y rotar guardando prefijo `Bearer ` |
+| `Secret not found` en logs | `secretName` no coincide con clave en Vault | Verificar nombre y volver a guardar con script |
+| PUT dataaddress devuelve 404 | ID asset incorrecto | Revisar `@id` y endpoint `.../assets/{id}/dataaddress` |
+
+## 13. Referencias
 
 - `extensions/data-plane/data-plane-http/.../BaseCommonHttpParamsDecorator.java`
 - `extensions/data-plane/data-plane-http/.../BaseSourceHttpParamsDecorator.java`
@@ -276,7 +328,7 @@ El consumidor invoca el dataplane con el token de la EDR y el body requerido por
 
 ---
 
-## 8. Script de seed rápido
+## 14. Seed rápido de asset de ejemplo (CircularPass)
 
 El script `./create-circularpass.assets.sh` registra automáticamente:
 
@@ -284,7 +336,7 @@ El script `./create-circularpass.assets.sh` registra automáticamente:
 - la policy `require-membership`,
 - y la `ContractDefinition` que vincula ambos.
 
-Variables utiles (opcional cambiar antes de ejecutar):
+Variables útiles (opcional cambiar antes de ejecutar):
 
 | Variable           | Valor por defecto                                      |
 |--------------------|--------------------------------------------------------|
@@ -303,5 +355,5 @@ MGMT_TOKEN=password \
 ./create-circularpass.assets.sh
 ```
 
-El script elimina versiones anteriores (si existen) y crea de nuevo el asset, la policy y la contract definition, dejando el conector listo para pruebas con CircularPass.
+El script elimina versiones previas y deja el conector listo para probar transferencia + consumo con bearer en Vault.
 
