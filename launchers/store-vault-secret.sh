@@ -28,11 +28,10 @@ set -euo pipefail
 #                   `SECRET_VALUE` está vacío. Útil para evitar exponer el token
 #                   en el historial o en `ps`.
 #
-# Ejemplos:
+# Ejemplos (stack local):
 #
 # 1) Guardar un bearer leyendo la cadena desde variable:
-#    kubectl port-forward svc/provider-vault -n mvd 8200:8200 &
-#    VAULT_ADDR=http://127.0.0.1:8200 \
+#    VAULT_ADDR=http://localhost:9200 \
 #    VAULT_TOKEN=root \
 #    SECRET_NAME=secure-api \
 #    SECRET_VALUE="Bearer eyJhbGciOi..." \
@@ -40,10 +39,20 @@ set -euo pipefail
 #
 # 2) Guardar una API Key desde un archivo:
 #    echo "123456-API-KEY" > /tmp/api.key
-#    SECRET_FILE=/tmp/api.key ./store-vault-secret.sh
+#    VAULT_ADDR=http://localhost:9200 VAULT_TOKEN=root SECRET_FILE=/tmp/api.key ./store-vault-secret.sh
 #
 # 3) Sin variables → el script pedirá el valor por consola (oculto):
 #    ./store-vault-secret.sh
+#
+# Verificación rápida tras guardar:
+#   # Con curl desde el host:
+#   curl -s -H "X-Vault-Token: root" http://localhost:9200/v1/secret/data/secure-api | jq -r '.data.data.content'
+#
+#   # Con CLI dentro del contenedor:
+#   docker exec edc-vault sh -lc 'VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root vault kv get -format=json secret/secure-api' | jq -r '.data.data.content'
+#
+#   # Sólo versión y metadatos:
+#   curl -s -H "X-Vault-Token: root" http://localhost:9200/v1/secret/metadata/secure-api | jq '.data.current_version'
 #
 # Nota: cada vez que sobrescribas el secreto no hace falta reiniciar nada; el
 #       dataplane tomará la última versión cuando ejecute una transferencia.
@@ -52,6 +61,7 @@ set -euo pipefail
 VAULT_ADDR="${VAULT_ADDR:-http://localhost:9200}"
 VAULT_TOKEN="${VAULT_TOKEN:-root}"
 SECRET_NAME="${SECRET_NAME:-secure-api}"
+# Por seguridad no se define un bearer por defecto. Debe llegar vía SECRET_VALUE, SECRET_FILE o consola.
 SECRET_VALUE="${SECRET_VALUE:-}"
 SECRET_FILE="${SECRET_FILE:-}"
 

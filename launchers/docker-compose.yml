@@ -49,10 +49,12 @@ services:
         JAR: build/libs/dataplane.jar
     image: edc-dataplane:latest
     restart: unless-stopped
+    # We start the dataplane as soon as controlplane container is started (not waiting for healthy)
+    # and implement an internal wait loop before launching the JVM. This avoids the "Created" state
+    # race where Compose never starts the container after controlplane turns healthy.
     depends_on:
-      # Requires a healthy control plane (for selector) and database (for persistence).
       controlplane:
-        condition: service_healthy
+        condition: service_started
       postgres:
         condition: service_healthy
     ports:
@@ -63,6 +65,15 @@ services:
       # Provide runtime configuration/logging from the launcher directory.
       - ./dataplane/configuration.properties:/app/configuration.properties:ro
       - ./dataplane/logging.properties:/app/logging.properties:ro
+    # Simple wait loop: poll controlplane health up to ~60s before starting Java runtime.
+    # Keeps original CMD invocation intact after the loop.
+    command: >-
+      sh -c '
+        echo "[dataplane-wait] Esperando controlplane (http://controlplane:8280/api/check/health)";
+        for i in $(seq 1 30); do
+          if curl -sf http://controlplane:8280/api/check/health >/dev/null; then
+            echo "[dataplane-wait] Controlplane OK"; break; fi; sleep 2; done;
+        exec java -Dedc.fs.config=/app/configuration.properties -Dedc.vault.secrets="${SECRETS}" -Djava.util.logging.config.file=/app/logging.properties -Djava.security.egd=file:/dev/urandom -jar edc-dataplane.jar --log-level=debug'
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/check/health || exit 1"]
       interval: 10s
