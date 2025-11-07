@@ -47,6 +47,24 @@ Rotación:
 * `authCode`: actualizar vía `PUT /assets/{id}/dataaddress`.
 * `secretName`: ejecutar script/llamada Vault (no se modifica el asset).
 
+### Otros métodos de autenticación soportados (más allá de Bearer)
+Aunque esta guía se centra en Bearer Token, el mismo mecanismo (`authKey` + `authCode` o `secretName`) permite varios patrones:
+
+| Método | Cómo configurarlo | Ejemplo de valor | Comentarios |
+|--------|-------------------|------------------|-------------|
+| API Key en cabecera | `authKey: "X-Api-Key"` + `secretName` o `authCode` | `my-api-key-123` | No anteponer `Bearer`. El Data Plane inserta el valor tal cual. |
+| API Key tipo Bearer custom | `authKey: "Authorization"` + valor en secreto | `Bearer eyJ...` | Igual que ejemplo principal. |
+| Basic Auth | `authKey: "Authorization"` + secreto | `Basic dXNlcjpwYXNz` | Generar con: `echo -n user:pass | base64`. Rotar cambiando el secreto. |
+| Custom header arbitraria | `authKey: "X-Custom-Signature"` + secreto | `sha256=ab34...` | Útil para firmas HMAC precomputadas. |
+| Token en Query Param (estático) | Usar `queryParams` en `dataAddress` | `queryParams": "api_key=XYZ"` | No rotará dinámicamente salvo que actualices el asset (no recomendable para llaves sensibles). |
+| Sin autenticación | Omitir campos de auth | — | Solo para recursos públicos. |
+
+Notas:
+1. Para API Key simple, suele ser preferible un `secretName` (rotación sin tocar asset).
+2. Para Basic Auth es crítico incluir el prefijo `Basic` dentro del valor guardado.
+3. Si necesitas múltiples cabeceras (p.ej. `X-Api-Key` y `Authorization` simultáneas) hoy solo se soporta una inyección directa dinámica; las adicionales deben definirse con claves `header:<Nombre>` estáticas.
+4. Evita poner tokens largos en `authCode` porque aparecerán si exportas el asset vía Management API; usa `secretName`.
+
 ## 4. Registro con token incrustado (`authCode`) [solo pruebas]
 
 Crea `asset-secure-endpoint.json`:
@@ -361,4 +379,105 @@ MGMT_TOKEN=password \
 ```
 
 El script elimina versiones previas y deja el conector listo para probar transferencia + consumo con bearer en Vault.
+
+### Definición JSON completa generada (aproximada)
+Para referencia, el asset que crea el script (simplificado) es equivalente a:
+
+```json
+{
+   "asset": {
+      "properties": {
+         "asset:prop:id": "asset-secure-endpoint",
+         "edc:name": "CircularPass Secure Instances",
+         "edc:description": "Listado de instancias seguras CircularPass",
+         "edc:contenttype": "application/json"
+      }
+   },
+   "dataAddress": {
+      "type": "HttpData",
+      "baseUrl": "https://api.circularpass.io/api/secure/v1/instances",
+      "proxyMethod": "true",
+      "proxyPath": "false",
+      "proxyQueryParams": "true",
+      "proxyBody": "false",
+      "authKey": "Authorization",
+      "secretName": "secure-api"
+   }
+}
+```
+
+La `Policy` creada (`require-membership`) normalmente exige una credencial de membresía y la `ContractDefinition` asocia esa policy al asset.
+
+### Guardar el token/API Key en Vault
+Si el endpoint CircularPass requiere un Bearer:
+
+```bash
+VAULT_ADDR=http://localhost:9200 \
+VAULT_TOKEN=root \
+SECRET_NAME=secure-api \
+SECRET_VALUE="Bearer eyJ..." \
+./launchers/store-vault-secret.sh
+```
+
+Si fuera una API Key en cabecera `X-Api-Key` podrías redefinir el asset cambiando:
+
+```json
+"authKey": "X-Api-Key",
+"secretName": "circularpass-api-key"
+```
+
+Y luego:
+
+```bash
+VAULT_ADDR=http://localhost:9200 \
+VAULT_TOKEN=root \
+SECRET_NAME=circularpass-api-key \
+SECRET_VALUE="mi-key-rotatoria" \
+./launchers/store-vault-secret.sh
+```
+
+### Negociación y transferencia (resumen)
+1. Catalog request (el consumidor obtiene el asset `asset-secure-endpoint`).
+2. Inicia negociación de contrato (`POST /management/v3/contractnegotiations`).
+3. Espera estado `FINALIZED` (polling al negotiation id).
+4. Crea transferencia:
+
+```bash
+curl -X POST http://localhost:9281/api/management/v3/transferprocesses \
+   -H "Authorization: Bearer password" -H "Content-Type: application/json" \
+   -d '{
+      "@context": {"edc": "https://w3id.org/edc/v0.0.1"},
+      "@type": "TransferRequestDto",
+      "assetId": "asset-secure-endpoint",
+      "contractId": "<contractAgreementId>",
+      "connectorAddress": "http://controlplane:8282/api/dsp",
+      "connectorId": "did:web:provider-identityhub%3A7093",
+      "protocol": "dataspace-protocol-http",
+      "dataDestination": {"type":"HttpProxy"},
+      "transferType": {"contentType":"application/json","isFinite":true}
+   }'
+```
+
+5. Cuando el transfer process está `COMPLETED`, obtén la EDR:
+
+```bash
+curl -H "Authorization: Bearer password" \
+   http://localhost:9281/api/management/v3/edrs/<tpId>/dataaddress | jq
+```
+
+6. Consume desde el Data Plane (usando el `authorization` devuelto):
+
+```bash
+EDR_TOKEN="<authorization>" \
+curl -H "Authorization: ${EDR_TOKEN}" http://localhost:9290/api/public
+```
+
+### Rotación del secreto en vivo
+Rotar sólo implica sobrescribir el valor en Vault:
+
+```bash
+vault kv put secret/secure-api content="Bearer NUEVO_TOKEN"
+```
+
+La siguiente invocación proxificada usará ya el nuevo valor sin renegociar ni re-crear la transferencia.
 
