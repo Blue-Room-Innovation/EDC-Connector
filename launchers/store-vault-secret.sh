@@ -44,6 +44,18 @@ set -euo pipefail
 # 3) Sin variables → el script pedirá el valor por consola (oculto):
 #    ./store-vault-secret.sh
 #
+# 4) Guardar credencial server-to-server con formato ApiKey <KEY_ID>:<KEY_SECRET>
+#    (por ejemplo para CircularPass donde el backend exige en el header Authorization este patrón):
+#    VAULT_ADDR=http://localhost:9200 \
+#    VAULT_TOKEN=root \
+#    SECRET_NAME=circularpass-api-key \
+#    SECRET_VALUE="ApiKey cp-client-123:shhSuperSecretValue" \
+#    ./store-vault-secret.sh
+#    # Luego en el asset usar:
+#    #   "authKey": "Authorization",
+#    #   "secretName": "circularpass-api-key"
+#    # El Data Plane inyectará: Authorization: ApiKey cp-client-123:shhSuperSecretValue
+#
 # Verificación rápida tras guardar:
 #   # Con curl desde el host:
 #   curl -s -H "X-Vault-Token: root" http://localhost:9200/v1/secret/data/secure-api | jq -r '.data.data.content'
