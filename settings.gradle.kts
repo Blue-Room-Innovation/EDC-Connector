@@ -30,6 +30,7 @@ pluginManagement {
     }
 }
 
+
 dependencyResolutionManagement {
     repositories {
         mavenLocal()
@@ -222,11 +223,17 @@ include(":extensions:data-plane-selector:store:sql:data-plane-instance-store-sql
 
 include(":extensions:policy-monitor:store:sql:policy-monitor-store-sql")
 
+include(":extensions:did-example-resolver")
+include(":extensions:catalog-node-resolver")
+include(":extensions:dcp-impl")
+include(":extensions:superuser-seed")
 
 // modules for launchers, i.e. runnable compositions of the app ------------------------------------
 include(":launchers:dpf-selector")
 include(":launchers:sts-server")
-include(":launchers:embedded-persistent-connector")
+include(":launchers:controlplane")
+include(":launchers:dataplane")
+include(":launchers:identity-hub")
 
 // extension points for a connector ----------------------------------------------------------------
 include(":spi:common:auth-spi")
