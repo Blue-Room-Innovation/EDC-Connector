@@ -10,18 +10,19 @@ Esta guía muestra cómo publicar y consumir un asset `HttpData` protegido con B
 5. Registro del asset con secreto en Vault (`secretName`)
 6. Propiedades del `dataAddress`
 7. Cómo funciona `proxyPath`
-8. Consumir el asset (EDR y llamadas al dataplane)
+8. Consumir el asset (EDR y llamadas al Data Plane)
 9. Flujo resumido
 10. Buenas prácticas
 11. Scripts relacionados
 12. Troubleshooting rápido
 13. Referencias
+14. Seed rápido de asset de ejemplo (CircularPass)
 
 ---
 
 ## 1. Objetivo y alcance
 
-El conector expone datos vía assets `HttpData` y el dataplane actúa como proxy. Para APIs que requieren Bearer Token (o API Key similar) puedes:
+El conector expone datos vía assets `HttpData` y el Data Plane actúa como proxy. Para APIs que requieren Bearer Token (o API Key similar) puedes:
 
 | Método | Uso | Riesgos | Cuándo elegir |
 |--------|-----|---------|---------------|
@@ -171,17 +172,17 @@ Revisar y rotar:
 
 Todas las propiedades viven dentro de `dataAddress`. Tabla de las más comunes:
 
-| Propiedad | Descripcion | Ejemplo util |
+| Propiedad | Descripción | Ejemplo útil |
 |-----------|-------------|--------------|
 | `type` | Siempre `HttpData` para transferencias HTTP. | "type": "HttpData" |
 | `baseUrl` | URL base del backend (sin `/data/<transferId>`). | "baseUrl": "https://api.circularpass.io/api/secure/v1" |
 | `path` | Ruta fija concatenada cuando `proxyPath = "false"`. | "path": "/instances/did%3Aweb%3A..." |
-| `method` | Metodo HTTP fijo (por defecto `GET`). | "method": "POST" |
-| `proxyMethod` | "true" reutiliza el metodo usado por el consumidor. | "proxyMethod": "true" |
+| `method` | Método HTTP fijo (por defecto `GET`). | "method": "POST" |
+| `proxyMethod` | "true" reutiliza el método usado por el consumidor. | "proxyMethod": "true" |
 | `proxyPath` | "true" concatena al `baseUrl` todo lo que vaya tras `/api/public/`. | "proxyPath": "true" |
-| `queryParams` | Parametros estaticos añadidos al backend. | "queryParams": "page=1&pageSize=10" |
-| `proxyQueryParams` | Replica los parametros enviados por el consumidor. | "proxyQueryParams": "true" |
-| `proxyBody` | "true" reenvia el body y `Content-Type` del consumidor. | "proxyBody": "true" |
+| `queryParams` | Parámetros estáticos añadidos al backend. | "queryParams": "page=1&pageSize=10" |
+| `proxyQueryParams` | Replica los parámetros enviados por el consumidor. | "proxyQueryParams": "true" |
+| `proxyBody` | "true" reenvía el body y `Content-Type` del consumidor. | "proxyBody": "true" |
 | `contentType` | Cabecera fija cuando no proxificas el body. | "contentType": "application/json" |
 | `authKey` | Cabecera donde se inyectara el secreto (Bearer, API key...). | "authKey": "Authorization" |
 | `authCode` | Valor literal del header (solo pruebas). | "authCode": "Bearer eyJ..." |
@@ -192,9 +193,9 @@ Todas las propiedades viven dentro de `dataAddress`. Tabla de las más comunes:
 ### Notas clave
 
 - Para rutas fijas deja `proxyPath = "false"` y define `baseUrl`/`path`.
-- Para rutas dinamicas usa `proxyPath = "true"` y deja que el consumidor añada segmentos tras `/api/public/`.
+- Para rutas dinámicas usa `proxyPath = "true"` y deja que el consumidor añada segmentos tras `/api/public/`.
 - `authKey` sirve tanto para Bearer como para API keys; `secretName` funciona igual en ambos casos.
-- `proxyBody = "true"` implica que el consumidor envia el cuerpo exacto al dataplane (ideal para `POST`).
+- `proxyBody = "true"` implica que el consumidor envía el cuerpo exacto al Data Plane (ideal para `POST`).
 
 ### Combinaciones frecuentes (plantillas)
 
@@ -209,7 +210,7 @@ Todas las propiedades viven dentro de `dataAddress`. Tabla de las más comunes:
    }
    ```
 
-2. **GET dinamico reutilizable**
+2. **GET dinámico reutilizable**
    ```json
    "dataAddress": {
      "type": "HttpData",
@@ -233,16 +234,18 @@ Todas las propiedades viven dentro de `dataAddress`. Tabla de las más comunes:
    }
    ```
 
-El consumidor invoca el dataplane con el token de la EDR y el body requerido por la API origen. El dataplane añade el header usando el secreto (Vault o `authCode`).
+El consumidor invoca el Data Plane con el token de la EDR (Endpoint Data Reference) y el body requerido por la API origen. El Data Plane añade el header usando el secreto (Vault o `authCode`).
 
 > Consejo: si tu API no acepta sufijos dinámicos, desactiva `proxyPath` o fija `path` con la ruta exacta.
-## 7. Cómo funciona `proxyPath`
 
-- El dataplane publica todo bajo `.../api/public/**`. Con `proxyPath = "true"` copia literalmente el tramo que vaya **despues de `/api/public/`** y lo concatena al `baseUrl`.
-- Ejemplo dinamico: con `baseUrl = https://api.circularpass.io/api/secure/v1` y `proxyPath = "true"`, si el consumidor invoca  
-  `GET .../api/public/data/<tpId>/instances/did%3A...`, el dataplane llamara a `https://api.circularpass.io/api/secure/v1/instances/did%3A...`.
-- Ejemplo estatico: con `proxyPath = "false"` y `baseUrl = https://api.circularpass.io/api/secure/v1/instances`, cualquier llamada a `.../api/public/...` terminara en `https://api.circularpass.io/api/secure/v1/instances`. Usa este modo cuando tu backend expone una ruta fija (como en el ejemplo de CircularPass sin ruta dinamica).
-- Si llamas al dataplane sin añadir nada tras `/api/public/` y tienes `proxyPath = "true"`, el sufijo sera exactamente lo que hayas enviado (p.ej. `data/<tpId>`). Si la API origen no admite ese sufijo, desactiva `proxyPath` o construye la ruta completa en la llamada del consumidor.
+## 7. Cómo funciona `proxyPath`
+ 
+
+- El Data Plane publica todo bajo `.../api/public/**`. Con `proxyPath = "true"` copia literalmente el tramo que vaya **después de `/api/public/`** y lo concatena al `baseUrl`.
+- Ejemplo dinámico: con `baseUrl = https://api.circularpass.io/api/secure/v1` y `proxyPath = "true"`, si el consumidor invoca  
+   `GET .../api/public/data/<tpId>/instances/did%3A...`, el Data Plane llamará a `https://api.circularpass.io/api/secure/v1/instances/did%3A...`.
+- Ejemplo estático: con `proxyPath = "false"` y `baseUrl = https://api.circularpass.io/api/secure/v1/instances`, cualquier llamada a `.../api/public/...` terminará en `https://api.circularpass.io/api/secure/v1/instances`. Usa este modo cuando tu backend expone una ruta fija (como en el ejemplo de CircularPass sin ruta dinámica).
+- Si llamas al Data Plane sin añadir nada tras `/api/public/` y tienes `proxyPath = "true"`, el sufijo será exactamente lo que hayas enviado (p.ej. `data/<tpId>`). Si la API origen no admite ese sufijo, desactiva `proxyPath` o construye la ruta completa en la llamada del consumidor.
 
 ---
 
@@ -268,7 +271,7 @@ Para peticiones PULL suele usarse `GET {endpoint}/data/{tpId}`, pero en este sta
       -H "Authorization: <token-EDR>"
    ```
 
-   El dataplane valida el token de la EDR y realiza la llamada al backend usando `baseUrl` (y `path`/`proxyPath` segun corresponda).
+   El Data Plane valida el token de la EDR y realiza la llamada al backend usando `baseUrl` (y `path`/`proxyPath` según corresponda).
 
 4. Para listar transferencias recientes ordenadas:
 
@@ -287,18 +290,20 @@ Para peticiones PULL suele usarse `GET {endpoint}/data/{tpId}`, pero en este sta
 2. Creas la `Policy` y la `ContractDefinition` para exponerlo en el catalogo.
 3. El consumidor negocia y recibe la EDR.
 4. El consumidor llama al dataplane con el token de la EDR.
-5. El dataplane injerta el bearer del Vault en la llamada al backend y retorna la respuesta.
+5. El Data Plane inyecta el **Bearer** del Vault en la llamada al backend y retorna la respuesta.
 
 ---
 
 ## 10. Buenas prácticas
 
-- Limita `authCode` a pruebas. En producción usa `secretName`.
+- Limita `authCode` a pruebas. En producción usa `secretName` para evitar exponer el token en exportaciones del asset.
 - Automatiza la rotación (`vault kv put secret/secure-api content="Bearer <nuevo>"`).
 - Ajusta `proxyPath`/`proxyMethod` según comportamiento del backend.
 - Logs útiles: `docker compose logs -f dataplane` y `docker compose logs -f controlplane`.
 - Tras cambiar el asset realiza una nueva transferencia (las anteriores no cambian su EDR).
 - Verifica el secreto rápido: `curl -H X-Vault-Token:root http://localhost:9200/v1/secret/data/secure-api | jq -r '.data.data.content'`.
+   Asegúrate de guardar el valor con el prefijo **Bearer** si tu backend lo exige.
+   Rotar el secreto no requiere renegociar contratos: la siguiente llamada del Data Plane leerá el valor actualizado.
 
 ---
 
@@ -315,7 +320,7 @@ Para peticiones PULL suele usarse `GET {endpoint}/data/{tpId}`, pero en este sta
 | Síntoma | Causa probable | Solución |
 |---------|----------------|----------|
 | 401 al llamar dataplane | EDR expirada o token incorrecto | Obtener EDR nuevamente tras transferencia COMPLETED |
-| 404 en dataplane | `proxyPath=true` pero ruta vacía/no válida | Ajustar llamada o poner `proxyPath=false` y definir `path` |
+| 404 en Data Plane | `proxyPath=true` pero ruta vacía/no válida | Ajustar llamada o poner `proxyPath=false` y definir `path` |
 | Backend 401 pese a EDR válida | Secreto ausente o mal formateado (sin `Bearer `) | Revisar Vault y rotar guardando prefijo `Bearer ` |
 | `Secret not found` en logs | `secretName` no coincide con clave en Vault | Verificar nombre y volver a guardar con script |
 | PUT dataaddress devuelve 404 | ID asset incorrecto | Revisar `@id` y endpoint `.../assets/{id}/dataaddress` |

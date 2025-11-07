@@ -3,17 +3,21 @@
 Este directorio contiene los lanzadores ("launchers") ejecutables del conector: **Control Plane**, **Data Plane** e **Identity Hub**, junto a servicios de soporte (**PostgreSQL** y **HashiCorp Vault**). La guía está pensada para arrancar el stack local sin conocer EDC a fondo y para entender los scripts clave de inicialización y registro de assets.
 
 Índice rápido:
-1. Resumen exprés
+1. Resumen rápido
 2. Requisitos
-3. Construcción de JARs sombreado (shadow)
-4. Configuración y material de identidad
-5. Arranque con Docker Compose
-6. Scripts disponibles (seed-local, store-vault-secret, create-circularpass.assets)
-7. Verificación y primeras llamadas
-8. Catálogo remoto y X-Api-Key opcional
-9. Parada y limpieza
-10. Arquitectura y puertos
-11. Solución de problemas frecuentes
+3. Clonar el repositorio
+4. Construcción de JARs sombreados (shadow)
+5. Revisar identidades, credenciales y participantes
+6. Arranque con Docker Compose
+7. (Opcional) Construir imágenes con Gradle (`dockerize`)
+8. Scripts disponibles y flujo inicial
+9. Verificación rápida
+10. Pedir catálogo al proveedor (ejemplo)
+11. Parada y limpieza
+12. Componentes y Arquitectura
+13. Tabla de puertos y contextos
+14. Solución de problemas frecuentes
+15. Referencias internas
 
 ---
 
@@ -65,8 +69,9 @@ La pila de Compose monta la configuración y el material de credenciales desde e
 Todas las piezas deben ser consistentes: el DID configurado en controlplane, dataplane e identity-hub debe corresponder con las claves/VCs montadas. Si no, tendrás reinicios/errores de validación.
 
 Notas prácticas:
-- Los servicios se resuelven mediante DNS de Docker (edc-controlplane, edc-identity-hub, edc-dataplane); con�ctalos a la misma red que el dataspace.
+- Los servicios se resuelven mediante DNS de Docker (`controlplane`, `identity-hub`, `dataplane`); conéctalos a la misma red que el dataspace.
 - Este repo NO incluye un servicio de emisión (issuer). Las VCs de `deployment/assets/credentials` son de ejemplo; para escenarios reales pide credenciales al issuer del dataspace y colócalas ahí.
+- Vault está en modo **dev** (token root expuesto). Úsalo solo para desarrollo.
 
 ### ¿Dónde encuentro endpoints y claves?
 
